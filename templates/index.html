@@ -220,6 +220,83 @@
             font-size: 1.2em;
         }
 
+        .clickable-name {
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .clickable-name:hover {
+            color: #ffd700;
+            text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+        }
+
+        .clickable-name:active {
+            transform: scale(0.98);
+        }
+
+        .copied-tooltip {
+            position: absolute;
+            background: #4caf50;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .copied-tooltip.show {
+            opacity: 1;
+        }
+
+        .trade-link {
+            display: inline-block;
+            margin-left: 8px;
+            color: #ffd700;
+            text-decoration: none;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            vertical-align: middle;
+        }
+
+        .trade-link:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.8));
+        }
+
+        th {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+
+        th:hover {
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.3;
+            font-size: 0.8em;
+        }
+
+        th.sort-asc::after {
+            content: ' ▲';
+            opacity: 1;
+        }
+
+        th.sort-desc::after {
+            content: ' ▼';
+            opacity: 1;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 1.8em;
@@ -314,17 +391,17 @@
 
         <div id="resultsContainer" style="display: none;">
             <div class="results">
-                <table>
+                <table id="resultsTableElement">
                     <thead>
                         <tr>
-                            <th>Card / Карта</th>
-                            <th>Set / Набор</th>
-                            <th>Price / Цена</th>
-                            <th>Total / Всего</th>
-                            <th>Reward / Награда</th>
-                            <th>Reward Price / Цена награды</th>
-                            <th>Profit / Прибыль</th>
-                            <th>ROI</th>
+                            <th class="sortable" data-column="card_name" data-type="string">Card / Карта</th>
+                            <th class="sortable" data-column="stack_size" data-type="number">Set / Набор</th>
+                            <th class="sortable" data-column="card_price" data-type="number">Price / Цена</th>
+                            <th class="sortable" data-column="total_cost" data-type="number">Total / Всего</th>
+                            <th class="sortable" data-column="reward_name" data-type="string">Reward / Награда</th>
+                            <th class="sortable" data-column="reward_price" data-type="number">Reward Price / Цена награды</th>
+                            <th class="sortable" data-column="profit" data-type="number">Profit / Прибыль</th>
+                            <th class="sortable" data-column="roi" data-type="number">ROI</th>
                         </tr>
                     </thead>
                     <tbody id="resultsTable">
@@ -340,6 +417,126 @@
     </div>
 
     <script>
+        // Global data storage for sorting
+        let currentData = [];
+        let currentLeague = 'Standard';
+
+        // Copy to clipboard function
+        function copyToClipboard(text, element) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show tooltip
+                const tooltip = document.createElement('div');
+                tooltip.className = 'copied-tooltip show';
+                tooltip.textContent = 'Copied! / Скопировано!';
+                element.appendChild(tooltip);
+
+                // Remove tooltip after animation
+                setTimeout(() => {
+                    tooltip.classList.remove('show');
+                    setTimeout(() => tooltip.remove(), 300);
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Generate trade URL
+        function generateTradeUrl(itemName, league) {
+            const baseUrl = 'https://www.pathofexile.com/trade/search';
+            const encodedName = encodeURIComponent(itemName);
+            return `${baseUrl}/${encodeURIComponent(league)}?q={"query":{"name":"${encodedName}","type":""}}`;
+        }
+
+        // Sort table
+        function sortTable(column, type) {
+            const headers = document.querySelectorAll('#resultsTableElement th.sortable');
+            const clickedHeader = document.querySelector(`#resultsTableElement th[data-column="${column}"]`);
+
+            // Determine sort direction
+            let direction = 'asc';
+            if (clickedHeader.classList.contains('sort-asc')) {
+                direction = 'desc';
+            }
+
+            // Remove all sort classes
+            headers.forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+
+            // Add sort class to clicked header
+            clickedHeader.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // Sort data
+            currentData.sort((a, b) => {
+                let aVal = a[column];
+                let bVal = b[column];
+
+                if (type === 'number') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                } else {
+                    aVal = String(aVal).toLowerCase();
+                    bVal = String(bVal).toLowerCase();
+                }
+
+                if (direction === 'asc') {
+                    return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+                } else {
+                    return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+                }
+            });
+
+            // Re-render table
+            renderTable(currentData, currentLeague);
+        }
+
+        // Render table rows
+        function renderTable(data, league) {
+            const tableBody = document.getElementById('resultsTable');
+            tableBody.innerHTML = '';
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                const profitClass = row.profit >= 0 ? 'profit-positive' : 'profit-negative';
+
+                // Store row data for sorting
+                tr.dataset.rowData = JSON.stringify(row);
+
+                tr.innerHTML = `
+                    <td>
+                        <span class="clickable-name" onclick="copyToClipboard('${row.card_name.replace(/'/g, "\\'")}', this)" title="Click to copy / Клик для копирования">
+                            ${row.card_name}
+                        </span>
+                    </td>
+                    <td>${row.stack_size}x</td>
+                    <td class="chaos">${row.card_price.toFixed(2)}c</td>
+                    <td class="chaos">${row.total_cost.toFixed(2)}c</td>
+                    <td>
+                        <span class="clickable-name" onclick="copyToClipboard('${row.reward_name.replace(/'/g, "\\'")}', this)" title="Click to copy / Клик для копирования">
+                            ${row.reward_name}
+                        </span>
+                        <a href="${generateTradeUrl(row.reward_name, league)}" target="_blank" class="trade-link" title="Search on trade / Искать на trade">🔍</a>
+                    </td>
+                    <td class="chaos">${row.reward_price.toFixed(2)}c</td>
+                    <td class="${profitClass}">${row.profit.toFixed(2)}c</td>
+                    <td class="${profitClass}">${row.roi.toFixed(1)}%</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Initialize table sorting
+        function initTableSorting() {
+            const headers = document.querySelectorAll('#resultsTableElement th.sortable');
+            headers.forEach(header => {
+                header.addEventListener('click', () => {
+                    const column = header.dataset.column;
+                    const type = header.dataset.type;
+                    sortTable(column, type);
+                });
+            });
+        }
+
         // Load available leagues from API
         async function loadLeagues() {
             const leagueLoading = document.getElementById('leagueLoading');
@@ -387,6 +584,9 @@
             const minRoi = parseFloat(document.getElementById('minRoi').value);
             const limit = parseInt(document.getElementById('limit').value);
 
+            // Store current league for trade links
+            currentLeague = league;
+
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
             const statsContainer = document.getElementById('statsContainer');
@@ -428,29 +628,14 @@
                 document.getElementById('totalProfit').textContent = data.stats.total_profit.toFixed(2);
                 document.getElementById('avgRoi').textContent = data.stats.avg_roi.toFixed(1);
 
-                // Update table
-                const tableBody = document.getElementById('resultsTable');
-                tableBody.innerHTML = '';
-
                 if (data.results.length === 0) {
                     noResults.style.display = 'block';
                 } else {
-                    data.results.forEach(row => {
-                        const tr = document.createElement('tr');
-                        const profitClass = row.profit >= 0 ? 'profit-positive' : 'profit-negative';
+                    // Store data for sorting
+                    currentData = data.results;
 
-                        tr.innerHTML = `
-                            <td>${row.card_name}</td>
-                            <td>${row.stack_size}x</td>
-                            <td class="chaos">${row.card_price.toFixed(2)}c</td>
-                            <td class="chaos">${row.total_cost.toFixed(2)}c</td>
-                            <td>${row.reward_name}</td>
-                            <td class="chaos">${row.reward_price.toFixed(2)}c</td>
-                            <td class="${profitClass}">${row.profit.toFixed(2)}c</td>
-                            <td class="${profitClass}">${row.roi.toFixed(1)}%</td>
-                        `;
-                        tableBody.appendChild(tr);
-                    });
+                    // Render table with new functionality
+                    renderTable(currentData, currentLeague);
 
                     statsContainer.style.display = 'block';
                     resultsContainer.style.display = 'block';
@@ -468,6 +653,10 @@
 
         // Load leagues and auto-analyze on page load
         window.addEventListener('load', async () => {
+            // Initialize table sorting
+            initTableSorting();
+
+            // Load leagues and analyze
             await loadLeagues();
             setTimeout(analyze, 500);
         });
