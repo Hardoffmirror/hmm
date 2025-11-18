@@ -22,6 +22,33 @@ DEFAULT_LIMIT = 50
 # File for storing custom leagues
 CUSTOM_LEAGUES_FILE = "custom_leagues.json"
 
+# File for storing hidden cards
+HIDDEN_CARDS_FILE = "hidden_cards.json"
+
+
+def load_hidden_cards():
+    """Load hidden cards from file"""
+    if os.path.exists(HIDDEN_CARDS_FILE):
+        try:
+            with open(HIDDEN_CARDS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('hidden_cards', [])
+        except Exception as e:
+            print(f"Error loading hidden cards: {e}")
+            return []
+    return []
+
+
+def save_hidden_cards(hidden_cards):
+    """Save hidden cards to file"""
+    try:
+        with open(HIDDEN_CARDS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'hidden_cards': hidden_cards}, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving hidden cards: {e}")
+        return False
+
 
 def load_custom_leagues():
     """Load custom leagues from file"""
@@ -67,9 +94,18 @@ def analyze():
         analyzer = DivinationCardAnalyzer(league=league)
         opportunities = analyzer.analyze(min_profit=min_profit, min_roi=min_roi)
 
+        # Load hidden cards to filter them out
+        hidden_cards = load_hidden_cards()
+
+        # Filter out hidden cards
+        filtered_opportunities = [
+            opp for opp in opportunities
+            if opp[0].name not in hidden_cards  # opp[0] is the card object
+        ]
+
         # Format results
         results = []
-        for card, reward_item, profit, roi in opportunities[:limit]:
+        for card, reward_item, profit, roi in filtered_opportunities[:limit]:
             results.append({
                 'card_name': card.name,
                 'stack_size': card.stack_size,
@@ -82,17 +118,18 @@ def analyze():
             })
 
         # Calculate statistics
-        total_profit = sum(opp[2] for opp in opportunities[:limit])
-        avg_roi = sum(opp[3] for opp in opportunities[:limit]) / len(opportunities[:limit]) if opportunities[:limit] else 0
+        total_profit = sum(opp[2] for opp in filtered_opportunities[:limit])
+        avg_roi = sum(opp[3] for opp in filtered_opportunities[:limit]) / len(filtered_opportunities[:limit]) if filtered_opportunities[:limit] else 0
 
         return jsonify({
             'success': True,
             'results': results,
             'stats': {
-                'total_opportunities': len(opportunities),
+                'total_opportunities': len(filtered_opportunities),
                 'shown': len(results),
                 'total_profit': round(total_profit, 2),
-                'avg_roi': round(avg_roi, 1)
+                'avg_roi': round(avg_roi, 1),
+                'hidden_count': len(opportunities) - len(filtered_opportunities)
             }
         })
 
@@ -250,6 +287,143 @@ def remove_custom_league():
 
     except Exception as e:
         print(f"Error removing custom league: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/hidden_cards', methods=['GET'])
+def get_hidden_cards():
+    """Get list of hidden cards"""
+    try:
+        cards = load_hidden_cards()
+        return jsonify({
+            'success': True,
+            'hidden_cards': cards
+        })
+    except Exception as e:
+        print(f"Error getting hidden cards: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/hidden_cards/add', methods=['POST'])
+def add_hidden_card():
+    """Add a card to hidden list"""
+    try:
+        data = request.json
+        card_name = data.get('card_name', '').strip()
+
+        if not card_name:
+            return jsonify({
+                'success': False,
+                'error': 'Card name cannot be empty'
+            }), 400
+
+        # Load existing hidden cards
+        hidden_cards = load_hidden_cards()
+
+        # Check if already exists
+        if card_name in hidden_cards:
+            return jsonify({
+                'success': False,
+                'error': 'Card already hidden'
+            }), 400
+
+        # Add card
+        hidden_cards.append(card_name)
+
+        # Save
+        if save_hidden_cards(hidden_cards):
+            return jsonify({
+                'success': True,
+                'message': f'Card "{card_name}" hidden',
+                'hidden_cards': hidden_cards
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save hidden cards'
+            }), 500
+
+    except Exception as e:
+        print(f"Error adding hidden card: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/hidden_cards/remove', methods=['POST'])
+def remove_hidden_card():
+    """Remove a card from hidden list"""
+    try:
+        data = request.json
+        card_name = data.get('card_name', '').strip()
+
+        if not card_name:
+            return jsonify({
+                'success': False,
+                'error': 'Card name cannot be empty'
+            }), 400
+
+        # Load existing hidden cards
+        hidden_cards = load_hidden_cards()
+
+        # Check if exists
+        if card_name not in hidden_cards:
+            return jsonify({
+                'success': False,
+                'error': 'Card not found in hidden list'
+            }), 404
+
+        # Remove card
+        hidden_cards.remove(card_name)
+
+        # Save
+        if save_hidden_cards(hidden_cards):
+            return jsonify({
+                'success': True,
+                'message': f'Card "{card_name}" restored',
+                'hidden_cards': hidden_cards
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save hidden cards'
+            }), 500
+
+    except Exception as e:
+        print(f"Error removing hidden card: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/hidden_cards/clear', methods=['POST'])
+def clear_hidden_cards():
+    """Clear all hidden cards"""
+    try:
+        if save_hidden_cards([]):
+            return jsonify({
+                'success': True,
+                'message': 'All hidden cards cleared'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to clear hidden cards'
+            }), 500
+
+    except Exception as e:
+        print(f"Error clearing hidden cards: {e}")
         traceback.print_exc()
         return jsonify({
             'success': False,

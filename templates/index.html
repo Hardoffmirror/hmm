@@ -487,6 +487,43 @@
             color: #ddd;
             font-size: 0.9em;
         }
+
+        /* Hide button styles */
+        .hide-btn {
+            background: rgba(255, 100, 100, 0.6);
+            padding: 4px 10px;
+            margin: 0;
+            font-size: 0.85em;
+            border-radius: 3px;
+            transition: background 0.3s;
+            cursor: pointer;
+        }
+
+        .hide-btn:hover {
+            background: rgba(255, 100, 100, 0.8);
+        }
+
+        .restore-btn {
+            background: rgba(100, 255, 100, 0.6);
+            padding: 5px 15px;
+            margin: 0;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+
+        .restore-btn:hover {
+            background: rgba(100, 255, 100, 0.8);
+        }
+
+        .hidden-count-badge {
+            display: inline-block;
+            background: rgba(255, 100, 100, 0.3);
+            border: 1px solid rgba(255, 100, 100, 0.5);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -501,7 +538,12 @@
                 </div>
             </div>
             <h1>⚗️ PoE Divination Card Analyzer</h1>
-            <p class="subtitle">Анализатор цен гадальных карт Path of Exile</p>
+            <p class="subtitle">
+                Анализатор цен гадальных карт Path of Exile
+                <button onclick="openHiddenCardsManager(); return false;" style="padding: 5px 10px; font-size: 0.85em; margin-left: 10px;" title="Manage hidden cards / Управление скрытыми картами">
+                    👁️‍🗨️ Hidden Cards <span id="hiddenCountBadge" class="hidden-count-badge" style="display: none;">0</span>
+                </button>
+            </p>
         </header>
 
         <div class="controls">
@@ -583,6 +625,7 @@
                             <th class="sortable" data-column="reward_price" data-type="number">Reward Price / Цена награды</th>
                             <th class="sortable" data-column="profit" data-type="number">Profit / Прибыль</th>
                             <th class="sortable" data-column="roi" data-type="number">ROI</th>
+                            <th>Actions / Действия</th>
                         </tr>
                     </thead>
                     <tbody id="resultsTable">
@@ -619,6 +662,34 @@
 
                 <h3 style="color: #ffd700; margin-bottom: 10px;">Custom Leagues / Кастомные лиги:</h3>
                 <div class="leagues-list" id="customLeaguesList">
+                    <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Cards Manager Modal -->
+    <div id="hiddenCardsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>👁️‍🗨️ Manage Hidden Cards / Управление скрытыми картами</h2>
+                <span class="close" onclick="closeHiddenCardsManager()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    <strong>Info / Инфо:</strong><br>
+                    Hidden cards will not appear in analysis results. You can restore them here.<br>
+                    Скрытые карты не будут показываться в результатах. Вы можете вернуть их здесь.
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: #ffd700; margin: 0;">Hidden Cards / Скрытые карты:</h3>
+                    <button onclick="clearAllHiddenCards()" style="padding: 5px 15px; margin: 0; font-size: 0.9em; background: rgba(255, 150, 50, 0.6);">
+                        🗑️ Clear All / Очистить все
+                    </button>
+                </div>
+
+                <div class="leagues-list" id="hiddenCardsList">
                     <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
                 </div>
             </div>
@@ -780,6 +851,11 @@
                     <td class="chaos">${formatPrice(row.reward_price)}</td>
                     <td class="${profitClass}">${formatPrice(row.profit)}</td>
                     <td class="${profitClass}">${row.roi.toFixed(1)}%</td>
+                    <td>
+                        <button class="hide-btn" onclick="hideCard('${row.card_name.replace(/'/g, "\\'")}'); return false;" title="Hide this card / Скрыть эту карту">
+                            👁️‍🗨️ Hide
+                        </button>
+                    </td>
                 `;
                 tableBody.appendChild(tr);
             });
@@ -1029,10 +1105,159 @@
             }
         }
 
+        // Hidden Cards Manager Functions
+        function openHiddenCardsManager() {
+            document.getElementById('hiddenCardsModal').style.display = 'block';
+            loadHiddenCardsList();
+        }
+
+        function closeHiddenCardsManager() {
+            document.getElementById('hiddenCardsModal').style.display = 'none';
+        }
+
+        // Update modal click handler to handle both modals
+        window.onclick = function(event) {
+            const leagueModal = document.getElementById('leagueModal');
+            const hiddenCardsModal = document.getElementById('hiddenCardsModal');
+            if (event.target === leagueModal) {
+                closeLeagueManager();
+            } else if (event.target === hiddenCardsModal) {
+                closeHiddenCardsManager();
+            }
+        }
+
+        async function loadHiddenCardsList() {
+            const listElement = document.getElementById('hiddenCardsList');
+            try {
+                const response = await fetch('/api/hidden_cards');
+                const data = await response.json();
+
+                if (data.success && data.hidden_cards) {
+                    updateHiddenCountBadge(data.hidden_cards.length);
+
+                    if (data.hidden_cards.length === 0) {
+                        listElement.innerHTML = '<p style="color: #888; text-align: center;">No hidden cards / Нет скрытых карт</p>';
+                    } else {
+                        listElement.innerHTML = '';
+                        data.hidden_cards.forEach(cardName => {
+                            const item = document.createElement('div');
+                            item.className = 'league-item';
+                            item.innerHTML = `
+                                <span class="league-name">${cardName}</span>
+                                <button class="restore-btn" onclick="restoreCard('${cardName.replace(/'/g, "\\'")}')">👁️ Restore / Вернуть</button>
+                            `;
+                            listElement.appendChild(item);
+                        });
+                    }
+                } else {
+                    listElement.innerHTML = '<p style="color: #f44;">Error loading hidden cards / Ошибка загрузки</p>';
+                }
+            } catch (err) {
+                console.error('Error loading hidden cards:', err);
+                listElement.innerHTML = '<p style="color: #f44;">Error loading hidden cards / Ошибка загрузки</p>';
+            }
+        }
+
+        function updateHiddenCountBadge(count) {
+            const badge = document.getElementById('hiddenCountBadge');
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        async function hideCard(cardName) {
+            if (!confirm(`Hide card "${cardName}"? / Скрыть карту "${cardName}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/hidden_cards/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ card_name: cardName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Refresh analysis
+                    analyze();
+                    updateHiddenCountBadge(data.hidden_cards.length);
+                    alert(`Card "${cardName}" hidden! / Карта "${cardName}" скрыта!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error hiding card:', err);
+                alert('Error hiding card / Ошибка скрытия карты');
+            }
+        }
+
+        async function restoreCard(cardName) {
+            try {
+                const response = await fetch('/api/hidden_cards/remove', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ card_name: cardName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadHiddenCardsList();
+                    analyze();  // Refresh analysis
+                    alert(`Card "${cardName}" restored! / Карта "${cardName}" возвращена!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error restoring card:', err);
+                alert('Error restoring card / Ошибка восстановления карты');
+            }
+        }
+
+        async function clearAllHiddenCards() {
+            if (!confirm('Clear all hidden cards? / Очистить все скрытые карты?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/hidden_cards/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadHiddenCardsList();
+                    analyze();  // Refresh analysis
+                    alert('All hidden cards cleared! / Все скрытые карты очищены!');
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error clearing hidden cards:', err);
+                alert('Error clearing hidden cards / Ошибка очистки');
+            }
+        }
+
         // Load leagues and auto-analyze on page load
         window.addEventListener('load', async () => {
             // Initialize table sorting
             initTableSorting();
+
+            // Load hidden cards count
+            loadHiddenCardsList();
 
             // Load leagues and analyze
             await loadLeagues();
