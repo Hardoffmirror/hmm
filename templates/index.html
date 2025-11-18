@@ -592,6 +592,41 @@
         .filter-category.disabled {
             opacity: 0.5;
         }
+
+        .editable-price, .editable-link {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+
+        .editable-price:hover, .editable-link:hover {
+            background: rgba(255, 215, 0, 0.2);
+            transform: scale(1.05);
+        }
+
+        .editable-price::after {
+            content: ' ✏️';
+            font-size: 0.8em;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .editable-price:hover::after {
+            opacity: 1;
+        }
+
+        .editable-link::after {
+            content: ' ✏️';
+            font-size: 0.8em;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .editable-link:hover::after {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -956,12 +991,14 @@
             const tableBody = document.getElementById('resultsTable');
             tableBody.innerHTML = '';
 
-            data.forEach(row => {
+            data.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 const profitClass = row.profit >= 0 ? 'profit-positive' : 'profit-negative';
 
                 // Store row data for sorting
                 tr.dataset.rowData = JSON.stringify(row);
+                tr.dataset.rowIndex = index;
+                tr.id = `row_${index}`;
 
                 tr.innerHTML = `
                     <td>
@@ -982,11 +1019,11 @@
                     <td class="${profitClass}">${formatPrice(row.profit)}</td>
                     <td class="${profitClass}">${row.roi.toFixed(1)}%</td>
                     <td>
-                        <button class="hide-btn" onclick="hideCard('${row.card_name.replace(/'/g, "\\'")}'); return false;" title="Hide this card / Скрыть эту карту">
-                            👁️‍🗨️ Hide
+                        <button class="hide-btn" onclick="hideCardImmediately('${row.card_name.replace(/'/g, "\\'")}', ${index}); return false;" title="Hide this card / Скрыть эту карту">
+                            Hide
                         </button>
-                        <button class="favorite-btn" onclick="addToFavorites(${JSON.stringify(row).replace(/'/g, "\\'")}); return false;" title="Add to favorites / Добавить в избранное" style="background: rgba(255, 215, 0, 0.6); margin-left: 5px;">
-                            ⭐ Fav
+                        <button onclick="addToFavoritesFromTable(${index}); return false;" title="Add to favorites / Добавить в избранное" style="background: rgba(255, 215, 0, 0.6); padding: 4px 8px; margin: 0 0 0 5px; font-size: 0.85em; border-radius: 3px;">
+                            ⭐
                         </button>
                     </td>
                 `;
@@ -1301,6 +1338,43 @@
             }
         }
 
+        // Hide card immediately from table
+        async function hideCardImmediately(cardName, rowIndex) {
+            try {
+                const response = await fetch('/api/hidden_cards/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ card_name: cardName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Remove from currentData array
+                    currentData.splice(rowIndex, 1);
+
+                    // Remove row from table
+                    const row = document.getElementById(`row_${rowIndex}`);
+                    if (row) {
+                        row.style.transition = 'opacity 0.3s';
+                        row.style.opacity = '0';
+                        setTimeout(() => {
+                            renderTable(currentData, currentLeague);
+                        }, 300);
+                    }
+
+                    updateHiddenCountBadge(data.hidden_cards.length);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error hiding card:', err);
+                alert('Error hiding card / Ошибка скрытия карты');
+            }
+        }
+
         async function hideCard(cardName) {
             if (!confirm(`Hide card "${cardName}"? / Скрыть карту "${cardName}"?`)) {
                 return;
@@ -1395,6 +1469,8 @@
 
         function closeItemFilters() {
             document.getElementById('itemFiltersModal').style.display = 'none';
+            // Refresh analysis when closing the modal to apply filter changes
+            analyze();
         }
 
         // Update modal click handler to include filters modal
@@ -1484,7 +1560,7 @@
                 if (data.success) {
                     currentFilters = data.filters;
                     loadItemFilters();  // Reload to update UI
-                    analyze();  // Refresh analysis
+                    // Analysis will be refreshed when modal is closed
                 } else {
                     alert(`Error: ${data.error}`);
                 }
@@ -1509,7 +1585,7 @@
                 if (data.success) {
                     currentFilters = data.filters;
                     loadItemFilters();  // Reload to update UI
-                    analyze();  // Refresh analysis
+                    // Analysis will be refreshed when modal is closed
                 } else {
                     alert(`Error: ${data.error}`);
                 }
@@ -1537,7 +1613,7 @@
                 if (data.success) {
                     currentFilters = data.filters;
                     loadItemFilters();  // Reload to update UI
-                    analyze();  // Refresh analysis
+                    // Analysis will be refreshed when modal is closed
                     alert('Filters reset! / Фильтры сброшены!');
                 } else {
                     alert(`Error: ${data.error}`);
@@ -1668,6 +1744,43 @@
                 badge.style.display = 'inline-block';
             } else {
                 badge.style.display = 'none';
+            }
+        }
+
+        // Add to favorites from table using row index
+        async function addToFavoritesFromTable(rowIndex) {
+            const row = currentData[rowIndex];
+            if (!row) {
+                alert('Error: Row not found / Ошибка: строка не найдена');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/favorites/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        card_name: row.card_name,
+                        stack_size: row.stack_size,
+                        reward_name: row.reward_name,
+                        api_card_price: row.card_price,
+                        api_reward_price: row.reward_price
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateFavoritesCountBadge(data.favorites.length);
+                    alert(`Card "${row.card_name}" added to favorites! / Карта "${row.card_name}" добавлена в избранное!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error adding to favorites:', err);
+                alert('Error adding to favorites / Ошибка добавления в избранное');
             }
         }
 
