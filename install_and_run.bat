@@ -5,6 +5,15 @@ echo Install and Run
 echo ========================================
 echo.
 
+REM Check if we're in the right directory
+if not exist "requirements.txt" (
+    echo [ERROR] requirements.txt not found!
+    echo Please run this from the project root folder 'hmm'
+    echo.
+    pause
+    exit /b 1
+)
+
 REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
