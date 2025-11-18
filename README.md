@@ -16,6 +16,25 @@
 
 ## Установка / Installation
 
+### 🪟 Windows
+**Подробная инструкция:** [WINDOWS_INSTALL.md](WINDOWS_INSTALL.md)
+
+**Быстрый старт:**
+1. Скачайте и установите [Python](https://www.python.org/downloads/) (отметьте "Add Python to PATH")
+2. Скачайте и установите [Git для Windows](https://git-scm.com/download/win)
+3. Откройте командную строку (cmd) и выполните:
+```cmd
+cd %USERPROFILE%\Desktop
+git clone <URL_репозитория>
+cd hmm
+git checkout claude/tarot-price-analyzer-014hS12tobbrAzrbfTky1CRS
+pip install -r requirements.txt
+python tarot_analyzer.py
+```
+
+**Или дважды кликните на файл:** `install_and_run.bat`
+
+### 🐧 Linux / 🍎 macOS
 ```bash
 pip install -r requirements.txt
 ```
