@@ -611,6 +611,9 @@
                 <button onclick="openHiddenCardsManager(); return false;" style="padding: 5px 10px; font-size: 0.85em; margin-left: 10px;" title="Manage hidden cards / Управление скрытыми картами">
                     👁️‍🗨️ Hidden Cards <span id="hiddenCountBadge" class="hidden-count-badge" style="display: none;">0</span>
                 </button>
+                <button onclick="openFavoritesManager(); return false;" style="padding: 5px 10px; font-size: 0.85em; margin-left: 5px; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000;" title="Manage favorites / Управление избранным">
+                    ⭐ Favorites <span id="favoritesCountBadge" class="hidden-count-badge" style="display: none; background: rgba(255, 215, 0, 0.3); border-color: rgba(255, 215, 0, 0.5);">0</span>
+                </button>
             </p>
         </header>
 
@@ -796,6 +799,33 @@
         </div>
     </div>
 
+    <!-- Favorites Manager Modal -->
+    <div id="favoritesModal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h2>⭐ Favorites / Избранное</h2>
+                <span class="close" onclick="closeFavoritesManager()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    <strong>Info / Инфо:</strong><br>
+                    Your favorite cards with custom prices and links. Click on values to edit them.<br>
+                    Ваши избранные карты с кастомными ценами и ссылками. Нажмите на значения для редактирования.
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <button onclick="clearAllFavorites()" style="padding: 8px 15px; margin: 0; font-size: 0.9em; background: rgba(255, 100, 100, 0.6);">
+                        🗑️ Clear All / Очистить все
+                    </button>
+                </div>
+
+                <div id="favoritesTableContainer" style="overflow-x: auto;">
+                    <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global data storage for sorting
         let currentData = [];
@@ -954,6 +984,9 @@
                     <td>
                         <button class="hide-btn" onclick="hideCard('${row.card_name.replace(/'/g, "\\'")}'); return false;" title="Hide this card / Скрыть эту карту">
                             👁️‍🗨️ Hide
+                        </button>
+                        <button class="favorite-btn" onclick="addToFavorites(${JSON.stringify(row).replace(/'/g, "\\'")}); return false;" title="Add to favorites / Добавить в избранное" style="background: rgba(255, 215, 0, 0.6); margin-left: 5px;">
+                            ⭐ Fav
                         </button>
                     </td>
                 `;
@@ -1512,6 +1545,285 @@
             } catch (err) {
                 console.error('Error resetting filters:', err);
                 alert('Error resetting filters / Ошибка сброса фильтров');
+            }
+        }
+
+        // Favorites Manager Functions
+        function openFavoritesManager() {
+            document.getElementById('favoritesModal').style.display = 'block';
+            loadFavoritesList();
+        }
+
+        function closeFavoritesManager() {
+            document.getElementById('favoritesModal').style.display = 'none';
+        }
+
+        // Update modal click handler to include favorites modal
+        window.onclick = function(event) {
+            const leagueModal = document.getElementById('leagueModal');
+            const hiddenCardsModal = document.getElementById('hiddenCardsModal');
+            const itemFiltersModal = document.getElementById('itemFiltersModal');
+            const favoritesModal = document.getElementById('favoritesModal');
+            if (event.target === leagueModal) {
+                closeLeagueManager();
+            } else if (event.target === hiddenCardsModal) {
+                closeHiddenCardsManager();
+            } else if (event.target === itemFiltersModal) {
+                closeItemFilters();
+            } else if (event.target === favoritesModal) {
+                closeFavoritesManager();
+            }
+        }
+
+        async function loadFavoritesList() {
+            const container = document.getElementById('favoritesTableContainer');
+            try {
+                const response = await fetch('/api/favorites');
+                const data = await response.json();
+
+                if (data.success) {
+                    const favorites = data.favorites;
+                    updateFavoritesCountBadge(favorites.length);
+
+                    if (favorites.length === 0) {
+                        container.innerHTML = '<p style="color: #888; text-align: center;">No favorites yet / Нет избранного</p>';
+                    } else {
+                        // Create table
+                        let tableHTML = `
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: rgba(255, 255, 255, 0.1);">
+                                        <th style="padding: 10px; text-align: left;">Card / Карта</th>
+                                        <th style="padding: 10px; text-align: center;">Set / Набор</th>
+                                        <th style="padding: 10px; text-align: left;">Reward / Награда</th>
+                                        <th style="padding: 10px; text-align: right;">API Price / API цена</th>
+                                        <th style="padding: 10px; text-align: right;">Custom Price / Своя цена</th>
+                                        <th style="padding: 10px; text-align: left;">Custom Link / Ссылка</th>
+                                        <th style="padding: 10px; text-align: center;">Actions / Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+
+                        favorites.forEach(fav => {
+                            const apiCardPrice = (fav.api_card_price * fav.stack_size).toFixed(2);
+                            const apiRewardPrice = fav.api_reward_price.toFixed(2);
+                            const customCardPrice = fav.custom_card_price !== null ? (fav.custom_card_price * fav.stack_size).toFixed(2) : '-';
+                            const customRewardPrice = fav.custom_reward_price !== null ? fav.custom_reward_price.toFixed(2) : '-';
+
+                            const cardName = fav.card_name.replace(/'/g, "\\'");
+
+                            tableHTML += `
+                                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                    <td style="padding: 10px;">${fav.card_name}</td>
+                                    <td style="padding: 10px; text-align: center;">${fav.stack_size}x</td>
+                                    <td style="padding: 10px;">${fav.reward_name}</td>
+                                    <td style="padding: 10px; text-align: right;">
+                                        <div>Card: ${apiCardPrice}c</div>
+                                        <div>Reward: ${apiRewardPrice}c</div>
+                                    </td>
+                                    <td style="padding: 10px; text-align: right;">
+                                        <div>
+                                            <span class="editable-price" onclick="editCustomPrice('${cardName}', 'card', ${fav.custom_card_price})" style="cursor: pointer; color: ${fav.custom_card_price !== null ? '#FFD700' : '#888'};" title="Click to edit / Клик для редактирования">
+                                                Card: ${customCardPrice}c
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span class="editable-price" onclick="editCustomPrice('${cardName}', 'reward', ${fav.custom_reward_price})" style="cursor: pointer; color: ${fav.custom_reward_price !== null ? '#FFD700' : '#888'};" title="Click to edit / Клик для редактирования">
+                                                Reward: ${customRewardPrice}c
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td style="padding: 10px;">
+                                        <span class="editable-link" onclick="editCustomLink('${cardName}', '${fav.custom_link}')" style="cursor: pointer; color: ${fav.custom_link ? '#4CAF50' : '#888'}; word-break: break-all;" title="Click to edit / Клик для редактирования">
+                                            ${fav.custom_link || '(empty / пусто)'}
+                                        </span>
+                                        ${fav.custom_link ? `<a href="${fav.custom_link}" target="_blank" style="margin-left: 5px;" title="Open link / Открыть ссылку">🔗</a>` : ''}
+                                    </td>
+                                    <td style="padding: 10px; text-align: center;">
+                                        <button class="remove-btn" onclick="removeFromFavorites('${cardName}')" style="padding: 5px 10px; font-size: 0.85em;">
+                                            🗑️ Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+
+                        tableHTML += '</tbody></table>';
+                        container.innerHTML = tableHTML;
+                    }
+                } else {
+                    container.innerHTML = '<p style="color: #f44;">Error loading favorites / Ошибка загрузки</p>';
+                }
+            } catch (err) {
+                console.error('Error loading favorites:', err);
+                container.innerHTML = '<p style="color: #f44;">Error loading favorites / Ошибка загрузки</p>';
+            }
+        }
+
+        function updateFavoritesCountBadge(count) {
+            const badge = document.getElementById('favoritesCountBadge');
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        async function addToFavorites(row) {
+            try {
+                const response = await fetch('/api/favorites/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        card_name: row.card_name,
+                        stack_size: row.stack_size,
+                        reward_name: row.reward_name,
+                        api_card_price: row.card_price,
+                        api_reward_price: row.reward_price
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateFavoritesCountBadge(data.favorites.length);
+                    alert(`Card "${row.card_name}" added to favorites! / Карта "${row.card_name}" добавлена в избранное!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error adding to favorites:', err);
+                alert('Error adding to favorites / Ошибка добавления в избранное');
+            }
+        }
+
+        async function removeFromFavorites(cardName) {
+            if (!confirm(`Remove "${cardName}" from favorites? / Удалить "${cardName}" из избранного?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/favorites/remove', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ card_name: cardName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadFavoritesList();
+                    alert(`Card "${cardName}" removed! / Карта "${cardName}" удалена!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error removing from favorites:', err);
+                alert('Error removing from favorites / Ошибка удаления из избранного');
+            }
+        }
+
+        async function editCustomPrice(cardName, priceType, currentValue) {
+            const promptText = priceType === 'card'
+                ? `Enter custom card price (chaos) for "${cardName}" or leave empty to clear:\nВведите свою цену карты (chaos) для "${cardName}" или оставьте пустым:`
+                : `Enter custom reward price (chaos) for "${cardName}" or leave empty to clear:\nВведите свою цену награды (chaos) для "${cardName}" или оставьте пустым:`;
+
+            const newValue = prompt(promptText, currentValue !== null ? currentValue : '');
+
+            if (newValue === null) return; // Cancelled
+
+            try {
+                const updateData = { card_name: cardName };
+                if (priceType === 'card') {
+                    updateData.custom_card_price = newValue === '' ? null : parseFloat(newValue);
+                } else {
+                    updateData.custom_reward_price = newValue === '' ? null : parseFloat(newValue);
+                }
+
+                const response = await fetch('/api/favorites/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadFavoritesList();
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error updating price:', err);
+                alert('Error updating price / Ошибка обновления цены');
+            }
+        }
+
+        async function editCustomLink(cardName, currentLink) {
+            const newLink = prompt(
+                `Enter custom link for "${cardName}":\nВведите свою ссылку для "${cardName}":`,
+                currentLink
+            );
+
+            if (newLink === null) return; // Cancelled
+
+            try {
+                const response = await fetch('/api/favorites/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        card_name: cardName,
+                        custom_link: newLink
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadFavoritesList();
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error updating link:', err);
+                alert('Error updating link / Ошибка обновления ссылки');
+            }
+        }
+
+        async function clearAllFavorites() {
+            if (!confirm('Clear all favorites? / Очистить все избранное?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/favorites/clear', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadFavoritesList();
+                    alert('All favorites cleared! / Все избранное очищено!');
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error clearing favorites:', err);
+                alert('Error clearing favorites / Ошибка очистки избранного');
             }
         }
 

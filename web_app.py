@@ -29,6 +29,33 @@ HIDDEN_CARDS_FILE = "hidden_cards.json"
 # File for storing item filters
 ITEM_FILTERS_FILE = "item_filters.json"
 
+# File for storing favorites
+FAVORITES_FILE = "favorites.json"
+
+
+def load_favorites():
+    """Load favorites from file"""
+    if os.path.exists(FAVORITES_FILE):
+        try:
+            with open(FAVORITES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('favorites', [])
+        except Exception as e:
+            print(f"Error loading favorites: {e}")
+            return []
+    return []
+
+
+def save_favorites(favorites):
+    """Save favorites to file"""
+    try:
+        with open(FAVORITES_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'favorites': favorites}, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving favorites: {e}")
+        return False
+
 
 def load_item_filters():
     """Load item filters from file"""
@@ -648,6 +675,220 @@ def reset_filters():
 
     except Exception as e:
         print(f"Error resetting filters: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/favorites', methods=['GET'])
+def get_favorites():
+    """Get list of favorite cards"""
+    try:
+        favorites = load_favorites()
+        return jsonify({
+            'success': True,
+            'favorites': favorites
+        })
+    except Exception as e:
+        print(f"Error getting favorites: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/favorites/add', methods=['POST'])
+def add_favorite():
+    """Add a card to favorites"""
+    try:
+        data = request.json
+        card_name = data.get('card_name', '').strip()
+        stack_size = data.get('stack_size', 1)
+        reward_name = data.get('reward_name', '').strip()
+        api_card_price = data.get('api_card_price', 0)
+        api_reward_price = data.get('api_reward_price', 0)
+
+        if not card_name or not reward_name:
+            return jsonify({
+                'success': False,
+                'error': 'Card name and reward name are required'
+            }), 400
+
+        # Load existing favorites
+        favorites = load_favorites()
+
+        # Check if already exists
+        for fav in favorites:
+            if fav['card_name'] == card_name:
+                return jsonify({
+                    'success': False,
+                    'error': 'Card already in favorites'
+                }), 400
+
+        # Add new favorite
+        from datetime import datetime
+        new_favorite = {
+            'card_name': card_name,
+            'stack_size': stack_size,
+            'reward_name': reward_name,
+            'api_card_price': api_card_price,
+            'api_reward_price': api_reward_price,
+            'custom_card_price': None,
+            'custom_reward_price': None,
+            'custom_link': '',
+            'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        favorites.append(new_favorite)
+
+        # Save
+        if save_favorites(favorites):
+            return jsonify({
+                'success': True,
+                'message': f'Card "{card_name}" added to favorites',
+                'favorites': favorites
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save favorites'
+            }), 500
+
+    except Exception as e:
+        print(f"Error adding favorite: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/favorites/remove', methods=['POST'])
+def remove_favorite():
+    """Remove a card from favorites"""
+    try:
+        data = request.json
+        card_name = data.get('card_name', '').strip()
+
+        if not card_name:
+            return jsonify({
+                'success': False,
+                'error': 'Card name cannot be empty'
+            }), 400
+
+        # Load existing favorites
+        favorites = load_favorites()
+
+        # Find and remove
+        original_len = len(favorites)
+        favorites = [fav for fav in favorites if fav['card_name'] != card_name]
+
+        if len(favorites) == original_len:
+            return jsonify({
+                'success': False,
+                'error': 'Card not found in favorites'
+            }), 404
+
+        # Save
+        if save_favorites(favorites):
+            return jsonify({
+                'success': True,
+                'message': f'Card "{card_name}" removed from favorites',
+                'favorites': favorites
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save favorites'
+            }), 500
+
+    except Exception as e:
+        print(f"Error removing favorite: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/favorites/update', methods=['POST'])
+def update_favorite():
+    """Update favorite card prices and link"""
+    try:
+        data = request.json
+        card_name = data.get('card_name', '').strip()
+        custom_card_price = data.get('custom_card_price')
+        custom_reward_price = data.get('custom_reward_price')
+        custom_link = data.get('custom_link', '')
+
+        if not card_name:
+            return jsonify({
+                'success': False,
+                'error': 'Card name cannot be empty'
+            }), 400
+
+        # Load existing favorites
+        favorites = load_favorites()
+
+        # Find and update
+        found = False
+        for fav in favorites:
+            if fav['card_name'] == card_name:
+                # Update custom prices (allow None to clear)
+                if custom_card_price is not None:
+                    fav['custom_card_price'] = float(custom_card_price) if custom_card_price != '' else None
+                if custom_reward_price is not None:
+                    fav['custom_reward_price'] = float(custom_reward_price) if custom_reward_price != '' else None
+                fav['custom_link'] = custom_link
+                found = True
+                break
+
+        if not found:
+            return jsonify({
+                'success': False,
+                'error': 'Card not found in favorites'
+            }), 404
+
+        # Save
+        if save_favorites(favorites):
+            return jsonify({
+                'success': True,
+                'message': f'Card "{card_name}" updated',
+                'favorites': favorites
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save favorites'
+            }), 500
+
+    except Exception as e:
+        print(f"Error updating favorite: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/favorites/clear', methods=['POST'])
+def clear_favorites():
+    """Clear all favorites"""
+    try:
+        if save_favorites([]):
+            return jsonify({
+                'success': True,
+                'message': 'All favorites cleared'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to clear favorites'
+            }), 500
+
+    except Exception as e:
+        print(f"Error clearing favorites: {e}")
         traceback.print_exc()
         return jsonify({
             'success': False,
