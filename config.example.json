@@ -1,0 +1,7 @@
+{
+  "league": "Standard",
+  "min_profit": 5,
+  "min_roi": 10,
+  "limit": 50,
+  "auto_refresh_interval": 300
+}
