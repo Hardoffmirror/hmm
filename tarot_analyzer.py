@@ -177,61 +177,106 @@ class PoeNinjaAPI:
     @staticmethod
     def get_active_leagues() -> List[str]:
         """
-        Fetch list of active leagues from poe.ninja
+        Fetch list of active leagues from poe.ninja by scraping their main page
         Returns a list of league names with caching
         """
         import time
+        import re
 
-        # Cache for 1 hour (3600 seconds)
+        # Cache for 30 minutes (1800 seconds) - shorter to get fresh leagues
         current_time = time.time()
-        cache_duration = 3600
+        cache_duration = 1800
 
         if (PoeNinjaAPI.LEAGUES_CACHE is not None and
             current_time - PoeNinjaAPI.LEAGUES_CACHE_TIMESTAMP < cache_duration):
             return PoeNinjaAPI.LEAGUES_CACHE
 
         try:
-            # Fetch from poe.ninja to detect available leagues
             session = requests.Session()
             session.headers.update({'User-Agent': 'PoE-Divination-Card-Analyzer/1.0'})
 
-            # Try to fetch data for common leagues to see which ones exist
-            test_leagues = [
-                "Standard",
-                "Hardcore",
-                "Settlers",
-                "Hardcore Settlers",
-                "Affliction",
-                "Hardcore Affliction",
-                "Necropolis",
-                "Hardcore Necropolis",
-                "SSF Standard",
-                "SSF Hardcore",
-                "SSF Settlers",
-                "SSF Hardcore Settlers"
-            ]
+            # Scrape poe.ninja homepage to get available leagues
+            print("Fetching active leagues from poe.ninja...")
 
+            try:
+                response = session.get("https://poe.ninja/economy", timeout=10)
+                response.raise_for_status()
+
+                # Extract league names from the page
+                # Look for league selection dropdown or league-specific URLs
+                content = response.text
+
+                # Try to find league names in various patterns
+                leagues_found = set()
+
+                # Pattern 1: league parameter in URLs
+                url_pattern = r'league=([^&"\s]+)'
+                matches = re.findall(url_pattern, content)
+                leagues_found.update(matches)
+
+                # Pattern 2: Common league name patterns in HTML
+                # This catches things like "Affliction", "Settlers", etc.
+                league_pattern = r'"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"'
+                potential_leagues = re.findall(league_pattern, content)
+
+                # Filter to likely league names (excluding common words)
+                excluded = {'Standard', 'Hardcore', 'League', 'Trade', 'Currency',
+                           'Items', 'Data', 'Economy', 'Search', 'Settings'}
+
+                for name in potential_leagues:
+                    if len(name) > 3 and name not in excluded:
+                        leagues_found.add(name)
+
+            except Exception as e:
+                print(f"Error scraping leagues: {e}")
+                leagues_found = set()
+
+            # Build comprehensive list of leagues to test
+            test_leagues = ["Standard", "Hardcore"]
+
+            # Add found leagues and their variants
+            for league in leagues_found:
+                if league and len(league) > 2:
+                    test_leagues.append(league)
+                    test_leagues.append(f"Hardcore {league}")
+                    test_leagues.append(f"SSF {league}")
+                    test_leagues.append(f"SSF Hardcore {league}")
+
+            # Add SSF Standard/Hardcore
+            test_leagues.extend(["SSF Standard", "SSF Hardcore"])
+
+            # Remove duplicates while preserving order
+            seen = set()
+            test_leagues = [x for x in test_leagues if not (x in seen or seen.add(x))]
+
+            print(f"Testing {len(test_leagues)} potential leagues...")
+
+            # Test each league
             active_leagues = []
-
-            for league in test_leagues:
+            for league in test_leagues[:30]:  # Limit to first 30 to avoid too many requests
                 try:
                     url = f"{PoeNinjaAPI.BASE_URL}/itemoverview"
                     params = {"league": league, "type": "Currency"}
-                    response = session.get(url, params=params, timeout=5)
+                    response = session.get(url, params=params, timeout=3)
 
                     if response.status_code == 200:
                         data = response.json()
-                        # If we got valid data with lines, the league exists
-                        if data.get("lines"):
+                        if data.get("lines") and len(data.get("lines", [])) > 0:
                             active_leagues.append(league)
+                            print(f"  ✓ Found: {league}")
                 except:
                     continue
 
-            # Always include Standard and Hardcore as fallback
-            if "Standard" not in active_leagues:
-                active_leagues.insert(0, "Standard")
-            if "Hardcore" not in active_leagues:
-                active_leagues.insert(1, "Hardcore")
+            # Ensure Standard and Hardcore are always first
+            if "Standard" in active_leagues:
+                active_leagues.remove("Standard")
+            if "Hardcore" in active_leagues:
+                active_leagues.remove("Hardcore")
+
+            active_leagues.insert(0, "Hardcore")
+            active_leagues.insert(0, "Standard")
+
+            print(f"Found {len(active_leagues)} active leagues")
 
             # Update cache
             PoeNinjaAPI.LEAGUES_CACHE = active_leagues
@@ -241,12 +286,13 @@ class PoeNinjaAPI:
 
         except Exception as e:
             print(f"Error fetching leagues: {e}")
+            import traceback
+            traceback.print_exc()
+
             # Return default leagues on error
             default_leagues = [
                 "Standard",
                 "Hardcore",
-                "Settlers",
-                "Hardcore Settlers",
                 "SSF Standard",
                 "SSF Hardcore"
             ]
