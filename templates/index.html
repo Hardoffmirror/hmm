@@ -297,6 +297,54 @@
             opacity: 1;
         }
 
+        .currency-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 215, 0, 0.1);
+            padding: 15px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            text-align: center;
+            min-width: 200px;
+        }
+
+        .currency-rate {
+            font-size: 1.2em;
+            color: #ffd700;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .currency-toggle {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .currency-btn {
+            padding: 5px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .currency-btn.active {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #000;
+            border-color: #ffd700;
+            font-weight: bold;
+        }
+
+        .currency-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 1.8em;
@@ -313,12 +361,26 @@
             th, td {
                 padding: 8px;
             }
+
+            .currency-display {
+                position: static;
+                margin: 10px auto;
+                max-width: 250px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
+        <header style="position: relative;">
+            <div class="currency-display">
+                <div class="currency-rate" id="divineRate">1 Divine = ? Chaos</div>
+                <div style="font-size: 0.8em; color: #888;">Currency / Валюта:</div>
+                <div class="currency-toggle">
+                    <button class="currency-btn active" id="chaosBtn" onclick="switchCurrency('chaos')">Chaos</button>
+                    <button class="currency-btn" id="divineBtn" onclick="switchCurrency('divine')">Divine</button>
+                </div>
+            </div>
             <h1>⚗️ PoE Divination Card Analyzer</h1>
             <p class="subtitle">Анализатор цен гадальных карт Path of Exile</p>
         </header>
@@ -379,7 +441,7 @@
                     <div class="stat-label">Shown / Показано</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value"><span id="totalProfit">0</span>c</div>
+                    <div class="stat-value"><span id="totalProfit">0</span><span id="totalProfitCurrency">c</span></div>
                     <div class="stat-label">Total Profit / Общая прибыль</div>
                 </div>
                 <div class="stat-card">
@@ -420,6 +482,8 @@
         // Global data storage for sorting
         let currentData = [];
         let currentLeague = 'Standard';
+        let currentCurrency = 'chaos';  // 'chaos' or 'divine'
+        let divineRate = 1.0;  // Divine to Chaos rate
 
         // Copy to clipboard function
         function copyToClipboard(text, element) {
@@ -455,6 +519,45 @@
             const queryString = encodeURIComponent(JSON.stringify(queryObj));
 
             return `${baseUrl}/${encodeURIComponent(league)}?q=${queryString}`;
+        }
+
+        // Load Divine Orb rate
+        async function loadDivineRate(league) {
+            try {
+                const response = await fetch(`/api/divine_rate?league=${encodeURIComponent(league)}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    divineRate = data.divine_to_chaos;
+                    document.getElementById('divineRate').textContent = `1 Divine = ${divineRate.toFixed(1)}c`;
+                }
+            } catch (err) {
+                console.error('Error loading divine rate:', err);
+            }
+        }
+
+        // Switch currency display
+        function switchCurrency(currency) {
+            currentCurrency = currency;
+
+            // Update button states
+            document.getElementById('chaosBtn').classList.toggle('active', currency === 'chaos');
+            document.getElementById('divineBtn').classList.toggle('active', currency === 'divine');
+
+            // Re-render table with new currency
+            if (currentData.length > 0) {
+                renderTable(currentData, currentLeague);
+            }
+        }
+
+        // Format price based on current currency
+        function formatPrice(chaosValue) {
+            if (currentCurrency === 'divine') {
+                const divineValue = chaosValue / divineRate;
+                return `${divineValue.toFixed(2)}d`;
+            } else {
+                return `${chaosValue.toFixed(2)}c`;
+            }
         }
 
         // Sort table
@@ -519,16 +622,16 @@
                         </span>
                     </td>
                     <td>${row.stack_size}x</td>
-                    <td class="chaos">${row.card_price.toFixed(2)}c</td>
-                    <td class="chaos">${row.total_cost.toFixed(2)}c</td>
+                    <td class="chaos">${formatPrice(row.card_price)}</td>
+                    <td class="chaos">${formatPrice(row.total_cost)}</td>
                     <td>
                         <span class="clickable-name" onclick="copyToClipboard('${row.reward_name.replace(/'/g, "\\'")}', this)" title="Click to copy / Клик для копирования">
                             ${row.reward_name}
                         </span>
                         <a href="${generateTradeUrl(row.reward_name, league)}" target="_blank" class="trade-link" title="Search on trade / Искать на trade">🔍</a>
                     </td>
-                    <td class="chaos">${row.reward_price.toFixed(2)}c</td>
-                    <td class="${profitClass}">${row.profit.toFixed(2)}c</td>
+                    <td class="chaos">${formatPrice(row.reward_price)}</td>
+                    <td class="${profitClass}">${formatPrice(row.profit)}</td>
                     <td class="${profitClass}">${row.roi.toFixed(1)}%</td>
                 `;
                 tableBody.appendChild(tr);
@@ -597,6 +700,9 @@
             // Store current league for trade links
             currentLeague = league;
 
+            // Load Divine rate for this league
+            await loadDivineRate(league);
+
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
             const statsContainer = document.getElementById('statsContainer');
@@ -635,7 +741,11 @@
                 // Update stats
                 document.getElementById('totalOpportunities').textContent = data.stats.total_opportunities;
                 document.getElementById('shown').textContent = data.stats.shown;
-                document.getElementById('totalProfit').textContent = data.stats.total_profit.toFixed(2);
+
+                const profitFormatted = formatPrice(data.stats.total_profit);
+                document.getElementById('totalProfit').textContent = profitFormatted.slice(0, -1);  // Remove last char (c or d)
+                document.getElementById('totalProfitCurrency').textContent = profitFormatted.slice(-1);  // Get last char
+
                 document.getElementById('avgRoi').textContent = data.stats.avg_roi.toFixed(1);
 
                 if (data.results.length === 0) {

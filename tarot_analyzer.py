@@ -251,17 +251,28 @@ class PoeNinjaAPI:
 
             print(f"Testing {len(test_leagues)} potential leagues...")
 
+            # Add known current leagues first
+            known_current = [
+                "Settlers of Kalguur",
+                "Hardcore Settlers of Kalguur",
+                "SSF Settlers of Kalguur",
+                "SSF Hardcore Settlers of Kalguur",
+            ]
+            for league in known_current:
+                if league not in test_leagues:
+                    test_leagues.insert(2, league)  # Insert after Standard and Hardcore
+
             # Test each league
             active_leagues = []
-            for league in test_leagues[:30]:  # Limit to first 30 to avoid too many requests
+            for league in test_leagues[:40]:  # Test more leagues
                 try:
-                    url = f"{PoeNinjaAPI.BASE_URL}/itemoverview"
+                    url = f"{PoeNinjaAPI.BASE_URL}/currencyoverview"
                     params = {"league": league, "type": "Currency"}
-                    response = session.get(url, params=params, timeout=3)
+                    response = session.get(url, params=params, timeout=5)
 
                     if response.status_code == 200:
                         data = response.json()
-                        if data.get("lines") and len(data.get("lines", [])) > 0:
+                        if data.get("lines") and len(data.get("lines", [])) > 5:
                             active_leagues.append(league)
                             print(f"  ✓ Found: {league}")
                 except:

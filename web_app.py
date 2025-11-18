@@ -91,14 +91,44 @@ def get_leagues():
         default_leagues = [
             "Standard",
             "Hardcore",
-            "Settlers",
-            "Hardcore Settlers",
+            "Settlers of Kalguur",
+            "Hardcore Settlers of Kalguur",
             "SSF Standard",
             "SSF Hardcore"
         ]
         return jsonify({
             'success': True,
             'leagues': default_leagues
+        })
+
+
+@app.route('/api/divine_rate', methods=['GET'])
+def get_divine_rate():
+    """Get Divine Orb to Chaos Orb exchange rate"""
+    try:
+        league = request.args.get('league', DEFAULT_LEAGUE)
+
+        api = PoeNinjaAPI(league)
+        currency_data = api.fetch_currency_prices()
+
+        divine_rate = 1.0
+        for item in currency_data:
+            if item.get('currencyTypeName') == 'Divine Orb':
+                divine_rate = item.get('chaosEquivalent', 1.0)
+                break
+
+        return jsonify({
+            'success': True,
+            'divine_to_chaos': round(divine_rate, 2),
+            'league': league
+        })
+
+    except Exception as e:
+        print(f"Error fetching divine rate: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'divine_to_chaos': 1.0
         })
 
 
