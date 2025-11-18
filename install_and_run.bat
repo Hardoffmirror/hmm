@@ -1,35 +1,32 @@
 @echo off
-chcp 65001 >nul
 echo ========================================
 echo PoE Divination Card Analyzer
-echo Установка и запуск / Install and Run
+echo Install and Run
 echo ========================================
 echo.
 
-REM Проверка Python
+REM Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ОШИБКА] Python не найден!
     echo [ERROR] Python not found!
     echo.
-    echo Установите Python с https://www.python.org/downloads/
-    echo При установке отметьте "Add Python to PATH"
+    echo Install Python from https://www.python.org/downloads/
+    echo Check "Add Python to PATH" during installation
     echo.
     pause
     exit /b 1
 )
 
-echo [OK] Python найден / Python found
+echo [OK] Python found
 python --version
 echo.
 
-REM Установка зависимостей
-echo Установка зависимостей / Installing dependencies...
+REM Install dependencies
+echo Installing dependencies...
 echo.
 python -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
-    echo [ОШИБКА] Не удалось установить зависимости
     echo [ERROR] Failed to install dependencies
     pause
     exit /b 1
@@ -37,17 +34,17 @@ if errorlevel 1 (
 
 echo.
 echo ========================================
-echo Установка завершена! / Installation complete!
+echo Installation complete!
 echo ========================================
 echo.
-echo Запуск анализатора... / Running analyzer...
+echo Running analyzer...
 echo.
 
-REM Запуск программы
+REM Run program
 python tarot_analyzer.py
 
 echo.
 echo ========================================
-echo Готово! / Done!
+echo Done!
 echo ========================================
 pause

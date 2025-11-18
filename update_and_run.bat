@@ -1,19 +1,18 @@
 @echo off
-chcp 65001 >nul
 echo ========================================
-echo Обновление и запуск / Update and run
+echo Update and Run
 echo ========================================
 echo.
 
-echo Обновление из Git...
+echo Updating from Git...
 git pull origin claude/tarot-price-analyzer-014hS12tobbrAzrbfTky1CRS
 
 echo.
-echo Обновление зависимостей...
+echo Updating dependencies...
 pip install -r requirements.txt --upgrade
 
 echo.
-echo Запуск анализатора...
+echo Starting analyzer...
 echo.
 python tarot_analyzer.py
 
