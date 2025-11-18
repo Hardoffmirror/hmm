@@ -443,8 +443,18 @@
         // Generate trade URL
         function generateTradeUrl(itemName, league) {
             const baseUrl = 'https://www.pathofexile.com/trade/search';
-            const encodedName = encodeURIComponent(itemName);
-            return `${baseUrl}/${encodeURIComponent(league)}?q={"query":{"name":"${encodedName}","type":""}}`;
+
+            // Create the query object
+            const queryObj = {
+                "query": {
+                    "name": itemName
+                }
+            };
+
+            // Convert to JSON string and encode
+            const queryString = encodeURIComponent(JSON.stringify(queryObj));
+
+            return `${baseUrl}/${encodeURIComponent(league)}?q=${queryString}`;
         }
 
         // Sort table
