@@ -177,117 +177,77 @@ class PoeNinjaAPI:
     @staticmethod
     def get_active_leagues() -> List[str]:
         """
-        Fetch list of active leagues from poe.ninja by scraping their main page
+        Fetch list of active leagues from poe.ninja
         Returns a list of league names with caching
         """
         import time
-        import re
 
-        # Cache for 30 minutes (1800 seconds) - shorter to get fresh leagues
+        # Cache for 30 minutes (1800 seconds)
         current_time = time.time()
         cache_duration = 1800
 
         if (PoeNinjaAPI.LEAGUES_CACHE is not None and
             current_time - PoeNinjaAPI.LEAGUES_CACHE_TIMESTAMP < cache_duration):
+            print(f"Using cached leagues: {PoeNinjaAPI.LEAGUES_CACHE}")
             return PoeNinjaAPI.LEAGUES_CACHE
 
         try:
             session = requests.Session()
             session.headers.update({'User-Agent': 'PoE-Divination-Card-Analyzer/1.0'})
 
-            # Scrape poe.ninja homepage to get available leagues
-            print("Fetching active leagues from poe.ninja...")
+            print("Detecting active leagues from poe.ninja...")
+            print("-" * 50)
 
-            try:
-                response = session.get("https://poe.ninja/economy", timeout=10)
-                response.raise_for_status()
-
-                # Extract league names from the page
-                # Look for league selection dropdown or league-specific URLs
-                content = response.text
-
-                # Try to find league names in various patterns
-                leagues_found = set()
-
-                # Pattern 1: league parameter in URLs
-                url_pattern = r'league=([^&"\s]+)'
-                matches = re.findall(url_pattern, content)
-                leagues_found.update(matches)
-
-                # Pattern 2: Common league name patterns in HTML
-                # This catches things like "Affliction", "Settlers", etc.
-                league_pattern = r'"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)"'
-                potential_leagues = re.findall(league_pattern, content)
-
-                # Filter to likely league names (excluding common words)
-                excluded = {'Standard', 'Hardcore', 'League', 'Trade', 'Currency',
-                           'Items', 'Data', 'Economy', 'Search', 'Settings'}
-
-                for name in potential_leagues:
-                    if len(name) > 3 and name not in excluded:
-                        leagues_found.add(name)
-
-            except Exception as e:
-                print(f"Error scraping leagues: {e}")
-                leagues_found = set()
-
-            # Build comprehensive list of leagues to test
-            test_leagues = ["Standard", "Hardcore"]
-
-            # Add found leagues and their variants
-            for league in leagues_found:
-                if league and len(league) > 2:
-                    test_leagues.append(league)
-                    test_leagues.append(f"Hardcore {league}")
-                    test_leagues.append(f"SSF {league}")
-                    test_leagues.append(f"SSF Hardcore {league}")
-
-            # Add SSF Standard/Hardcore
-            test_leagues.extend(["SSF Standard", "SSF Hardcore"])
-
-            # Remove duplicates while preserving order
-            seen = set()
-            test_leagues = [x for x in test_leagues if not (x in seen or seen.add(x))]
-
-            print(f"Testing {len(test_leagues)} potential leagues...")
-
-            # Add known current leagues first
-            known_current = [
+            # List of known possible leagues (UPDATE THIS when new league starts!)
+            # Current as of December 2024
+            possible_leagues = [
+                # Current challenge league (update these when new league starts!)
                 "Settlers of Kalguur",
                 "Hardcore Settlers of Kalguur",
+
+                # Permanent leagues
+                "Standard",
+                "Hardcore",
+
+                # SSF variants
                 "SSF Settlers of Kalguur",
                 "SSF Hardcore Settlers of Kalguur",
+                "SSF Standard",
+                "SSF Hardcore",
             ]
-            for league in known_current:
-                if league not in test_leagues:
-                    test_leagues.insert(2, league)  # Insert after Standard and Hardcore
 
-            # Test each league
             active_leagues = []
-            for league in test_leagues[:40]:  # Test more leagues
+
+            # Test each league by fetching currency data
+            for league in possible_leagues:
                 try:
                     url = f"{PoeNinjaAPI.BASE_URL}/currencyoverview"
                     params = {"league": league, "type": "Currency"}
+                    print(f"Testing: {league}...", end=" ")
                     response = session.get(url, params=params, timeout=5)
 
                     if response.status_code == 200:
                         data = response.json()
-                        if data.get("lines") and len(data.get("lines", [])) > 5:
+                        lines = data.get("lines", [])
+                        # League is active if it has currency data
+                        if lines and len(lines) >= 5:
                             active_leagues.append(league)
-                            print(f"  ✓ Found: {league}")
-                except:
+                            print(f"✓ ACTIVE ({len(lines)} currencies)")
+                        else:
+                            print(f"✗ No data ({len(lines)} items)")
+                    else:
+                        print(f"✗ HTTP {response.status_code}")
+                except Exception as e:
+                    print(f"✗ Error: {e}")
                     continue
 
-            # Ensure Standard and Hardcore are always first
-            if "Standard" in active_leagues:
-                active_leagues.remove("Standard")
-            if "Hardcore" in active_leagues:
-                active_leagues.remove("Hardcore")
-
-            active_leagues.insert(0, "Hardcore")
-            active_leagues.insert(0, "Standard")
-
+            print("-" * 50)
             print(f"Found {len(active_leagues)} active leagues")
+
+            # If no leagues found, return permanent leagues as fallback
+            if not active_leagues:
+                print("WARNING: No leagues detected! Using fallback list.")
+                active_leagues = ["Standard", "Hardcore", "Settlers of Kalguur"]
 
             # Update cache
             PoeNinjaAPI.LEAGUES_CACHE = active_leagues
@@ -300,14 +260,8 @@ class PoeNinjaAPI:
             import traceback
             traceback.print_exc()
 
-            # Return default leagues on error
-            default_leagues = [
-                "Standard",
-                "Hardcore",
-                "SSF Standard",
-                "SSF Hardcore"
-            ]
-            return default_leagues
+            # Return fallback leagues
+            return ["Standard", "Hardcore", "Settlers of Kalguur", "SSF Standard"]
 
 
 class DivinationCardAnalyzer:
