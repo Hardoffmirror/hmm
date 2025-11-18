@@ -368,6 +368,125 @@
                 max-width: 250px;
             }
         }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-header h2 {
+            color: #ffd700;
+            margin: 0;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close:hover {
+            color: #fff;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .add-league-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .add-league-form input {
+            flex: 1;
+        }
+
+        .add-league-form button {
+            padding: 12px 20px;
+            margin-top: 0;
+        }
+
+        .leagues-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .league-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 5px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .league-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .league-name {
+            color: #e0e0e0;
+            font-weight: 500;
+        }
+
+        .remove-btn {
+            background: rgba(255, 50, 50, 0.6);
+            padding: 5px 15px;
+            margin: 0;
+            font-size: 0.9em;
+            transition: background 0.3s;
+        }
+
+        .remove-btn:hover {
+            background: rgba(255, 50, 50, 0.8);
+        }
+
+        .modal-info {
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #ddd;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -392,12 +511,12 @@
                         League / Лига:
                         <span id="leagueLoading" style="color: #ffd700; font-size: 0.9em; display: none;">⟳ Loading...</span>
                         <button onclick="loadLeagues(); return false;" style="padding: 2px 8px; font-size: 0.8em; margin-left: 5px;" title="Refresh leagues / Обновить лиги">🔄</button>
+                        <button onclick="openLeagueManager(); return false;" style="padding: 2px 8px; font-size: 0.8em; margin-left: 5px;" title="Manage custom leagues / Управление лигами">⚙️</button>
                     </label>
                     <select id="league">
                         <option value="Standard">Standard</option>
                         <option value="Hardcore">Hardcore</option>
-                        <option value="Settlers">Settlers</option>
-                        <option value="Hardcore Settlers">Hardcore Settlers</option>
+                        <option value="Keepers">Keepers</option>
                         <option value="SSF Standard">SSF Standard</option>
                         <option value="SSF Hardcore">SSF Hardcore</option>
                     </select>
@@ -475,6 +594,34 @@
         <div id="noResults" class="no-results" style="display: none;">
             <p>No profitable opportunities found with current filters</p>
             <p>Не найдено выгодных возможностей с текущими фильтрами</p>
+        </div>
+    </div>
+
+    <!-- League Manager Modal -->
+    <div id="leagueModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Manage Leagues / Управление лигами</h2>
+                <span class="close" onclick="closeLeagueManager()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    <strong>Info / Инфо:</strong><br>
+                    Add custom league names here. These leagues will appear in the league selector.<br>
+                    Добавьте названия лиг. Они появятся в селекторе лиг.
+                </div>
+
+                <div class="add-league-form">
+                    <input type="text" id="newLeagueName" placeholder="Enter league name / Введите название лиги"
+                           onkeypress="if(event.key==='Enter') addCustomLeague()">
+                    <button onclick="addCustomLeague()">➕ Add / Добавить</button>
+                </div>
+
+                <h3 style="color: #ffd700; margin-bottom: 10px;">Custom Leagues / Кастомные лиги:</h3>
+                <div class="leagues-list" id="customLeaguesList">
+                    <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -768,6 +915,117 @@
             } finally {
                 loading.style.display = 'none';
                 analyzeBtn.disabled = false;
+            }
+        }
+
+        // League Manager Functions
+        function openLeagueManager() {
+            document.getElementById('leagueModal').style.display = 'block';
+            loadCustomLeagues();
+        }
+
+        function closeLeagueManager() {
+            document.getElementById('leagueModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('leagueModal');
+            if (event.target === modal) {
+                closeLeagueManager();
+            }
+        }
+
+        async function loadCustomLeagues() {
+            const listElement = document.getElementById('customLeaguesList');
+            try {
+                const response = await fetch('/api/custom_leagues');
+                const data = await response.json();
+
+                if (data.success && data.leagues) {
+                    if (data.leagues.length === 0) {
+                        listElement.innerHTML = '<p style="color: #888; text-align: center;">No custom leagues yet / Нет кастомных лиг</p>';
+                    } else {
+                        listElement.innerHTML = '';
+                        data.leagues.forEach(league => {
+                            const item = document.createElement('div');
+                            item.className = 'league-item';
+                            item.innerHTML = `
+                                <span class="league-name">${league}</span>
+                                <button class="remove-btn" onclick="removeCustomLeague('${league}')">🗑️ Remove / Удалить</button>
+                            `;
+                            listElement.appendChild(item);
+                        });
+                    }
+                } else {
+                    listElement.innerHTML = '<p style="color: #f44;">Error loading leagues / Ошибка загрузки</p>';
+                }
+            } catch (err) {
+                console.error('Error loading custom leagues:', err);
+                listElement.innerHTML = '<p style="color: #f44;">Error loading leagues / Ошибка загрузки</p>';
+            }
+        }
+
+        async function addCustomLeague() {
+            const input = document.getElementById('newLeagueName');
+            const leagueName = input.value.trim();
+
+            if (!leagueName) {
+                alert('Please enter a league name / Введите название лиги');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/custom_leagues/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ league: leagueName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    input.value = '';
+                    loadCustomLeagues();
+                    loadLeagues();  // Refresh main league selector
+                    alert(`League "${leagueName}" added! / Лига "${leagueName}" добавлена!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error adding league:', err);
+                alert('Error adding league / Ошибка добавления лиги');
+            }
+        }
+
+        async function removeCustomLeague(leagueName) {
+            if (!confirm(`Remove league "${leagueName}"? / Удалить лигу "${leagueName}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/custom_leagues/remove', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ league: leagueName })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    loadCustomLeagues();
+                    loadLeagues();  // Refresh main league selector
+                    alert(`League "${leagueName}" removed! / Лига "${leagueName}" удалена!`);
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error removing league:', err);
+                alert('Error removing league / Ошибка удаления лиги');
             }
         }
 

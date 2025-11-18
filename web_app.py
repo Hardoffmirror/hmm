@@ -8,14 +8,43 @@ from flask import Flask, render_template, request, jsonify
 import sys
 from tarot_analyzer import DivinationCardAnalyzer, PoeNinjaAPI
 import traceback
+import json
+import os
 
 app = Flask(__name__)
 
 # Default settings
-DEFAULT_LEAGUE = "Standard"
+DEFAULT_LEAGUE = "Keepers"
 DEFAULT_MIN_PROFIT = 0
 DEFAULT_MIN_ROI = 0
 DEFAULT_LIMIT = 50
+
+# File for storing custom leagues
+CUSTOM_LEAGUES_FILE = "custom_leagues.json"
+
+
+def load_custom_leagues():
+    """Load custom leagues from file"""
+    if os.path.exists(CUSTOM_LEAGUES_FILE):
+        try:
+            with open(CUSTOM_LEAGUES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('leagues', [])
+        except Exception as e:
+            print(f"Error loading custom leagues: {e}")
+            return []
+    return []
+
+
+def save_custom_leagues(leagues):
+    """Save custom leagues to file"""
+    try:
+        with open(CUSTOM_LEAGUES_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'leagues': leagues}, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving custom leagues: {e}")
+        return False
 
 
 @app.route('/')
@@ -78,28 +107,154 @@ def analyze():
 
 @app.route('/api/leagues', methods=['GET'])
 def get_leagues():
-    """Get list of available leagues from poe.ninja"""
+    """Get list of available leagues (standard + custom)"""
     try:
-        leagues = PoeNinjaAPI.get_active_leagues()
+        # Get standard leagues
+        standard_leagues = [
+            "Standard",
+            "Hardcore",
+            "SSF Standard",
+            "SSF Hardcore"
+        ]
+
+        # Load custom leagues
+        custom_leagues = load_custom_leagues()
+
+        # Combine: custom first (so they appear at top), then standard
+        all_leagues = custom_leagues + standard_leagues
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_leagues = []
+        for league in all_leagues:
+            if league not in seen:
+                seen.add(league)
+                unique_leagues.append(league)
+
+        return jsonify({
+            'success': True,
+            'leagues': unique_leagues
+        })
+    except Exception as e:
+        print(f"Error fetching leagues: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': True,
+            'leagues': ["Standard", "Hardcore"]
+        })
+
+
+@app.route('/api/custom_leagues', methods=['GET'])
+def get_custom_leagues():
+    """Get list of custom leagues"""
+    try:
+        leagues = load_custom_leagues()
         return jsonify({
             'success': True,
             'leagues': leagues
         })
     except Exception as e:
-        print(f"Error fetching leagues: {e}")
-        # Return default leagues on error
-        default_leagues = [
-            "Standard",
-            "Hardcore",
-            "Keepers of the Flame",
-            "Hardcore Keepers of the Flame",
-            "SSF Standard",
-            "SSF Hardcore"
-        ]
+        print(f"Error getting custom leagues: {e}")
         return jsonify({
-            'success': True,
-            'leagues': default_leagues
-        })
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/custom_leagues/add', methods=['POST'])
+def add_custom_league():
+    """Add a custom league"""
+    try:
+        data = request.json
+        league_name = data.get('league', '').strip()
+
+        if not league_name:
+            return jsonify({
+                'success': False,
+                'error': 'League name cannot be empty'
+            }), 400
+
+        # Load existing leagues
+        leagues = load_custom_leagues()
+
+        # Check if already exists
+        if league_name in leagues:
+            return jsonify({
+                'success': False,
+                'error': 'League already exists'
+            }), 400
+
+        # Add new league
+        leagues.append(league_name)
+
+        # Save
+        if save_custom_leagues(leagues):
+            return jsonify({
+                'success': True,
+                'message': f'League "{league_name}" added',
+                'leagues': leagues
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save leagues'
+            }), 500
+
+    except Exception as e:
+        print(f"Error adding custom league: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/custom_leagues/remove', methods=['POST'])
+def remove_custom_league():
+    """Remove a custom league"""
+    try:
+        data = request.json
+        league_name = data.get('league', '').strip()
+
+        if not league_name:
+            return jsonify({
+                'success': False,
+                'error': 'League name cannot be empty'
+            }), 400
+
+        # Load existing leagues
+        leagues = load_custom_leagues()
+
+        # Check if exists
+        if league_name not in leagues:
+            return jsonify({
+                'success': False,
+                'error': 'League not found'
+            }), 404
+
+        # Remove league
+        leagues.remove(league_name)
+
+        # Save
+        if save_custom_leagues(leagues):
+            return jsonify({
+                'success': True,
+                'message': f'League "{league_name}" removed',
+                'leagues': leagues
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save leagues'
+            }), 500
+
+    except Exception as e:
+        print(f"Error removing custom league: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @app.route('/api/divine_rate', methods=['GET'])
