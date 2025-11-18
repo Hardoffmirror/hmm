@@ -37,6 +37,8 @@ class PoeNinjaAPI:
     """Client for poe.ninja API"""
 
     BASE_URL = "https://poe.ninja/api/data"
+    LEAGUES_CACHE = None
+    LEAGUES_CACHE_TIMESTAMP = 0
 
     # Item type categories for API
     ITEM_TYPES = [
@@ -171,6 +173,84 @@ class PoeNinjaAPI:
 
         print(f"Загружено цен: {len(price_map)} / Loaded prices: {len(price_map)}")
         return price_map
+
+    @staticmethod
+    def get_active_leagues() -> List[str]:
+        """
+        Fetch list of active leagues from poe.ninja
+        Returns a list of league names with caching
+        """
+        import time
+
+        # Cache for 1 hour (3600 seconds)
+        current_time = time.time()
+        cache_duration = 3600
+
+        if (PoeNinjaAPI.LEAGUES_CACHE is not None and
+            current_time - PoeNinjaAPI.LEAGUES_CACHE_TIMESTAMP < cache_duration):
+            return PoeNinjaAPI.LEAGUES_CACHE
+
+        try:
+            # Fetch from poe.ninja to detect available leagues
+            session = requests.Session()
+            session.headers.update({'User-Agent': 'PoE-Divination-Card-Analyzer/1.0'})
+
+            # Try to fetch data for common leagues to see which ones exist
+            test_leagues = [
+                "Standard",
+                "Hardcore",
+                "Settlers",
+                "Hardcore Settlers",
+                "Affliction",
+                "Hardcore Affliction",
+                "Necropolis",
+                "Hardcore Necropolis",
+                "SSF Standard",
+                "SSF Hardcore",
+                "SSF Settlers",
+                "SSF Hardcore Settlers"
+            ]
+
+            active_leagues = []
+
+            for league in test_leagues:
+                try:
+                    url = f"{PoeNinjaAPI.BASE_URL}/itemoverview"
+                    params = {"league": league, "type": "Currency"}
+                    response = session.get(url, params=params, timeout=5)
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        # If we got valid data with lines, the league exists
+                        if data.get("lines"):
+                            active_leagues.append(league)
+                except:
+                    continue
+
+            # Always include Standard and Hardcore as fallback
+            if "Standard" not in active_leagues:
+                active_leagues.insert(0, "Standard")
+            if "Hardcore" not in active_leagues:
+                active_leagues.insert(1, "Hardcore")
+
+            # Update cache
+            PoeNinjaAPI.LEAGUES_CACHE = active_leagues
+            PoeNinjaAPI.LEAGUES_CACHE_TIMESTAMP = current_time
+
+            return active_leagues
+
+        except Exception as e:
+            print(f"Error fetching leagues: {e}")
+            # Return default leagues on error
+            default_leagues = [
+                "Standard",
+                "Hardcore",
+                "Settlers",
+                "Hardcore Settlers",
+                "SSF Standard",
+                "SSF Hardcore"
+            ]
+            return default_leagues
 
 
 class DivinationCardAnalyzer:

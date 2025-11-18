@@ -249,7 +249,11 @@
         <div class="controls">
             <div class="control-group">
                 <div class="form-group">
-                    <label for="league">League / Лига:</label>
+                    <label for="league">
+                        League / Лига:
+                        <span id="leagueLoading" style="color: #ffd700; font-size: 0.9em; display: none;">⟳ Loading...</span>
+                        <button onclick="loadLeagues(); return false;" style="padding: 2px 8px; font-size: 0.8em; margin-left: 5px;" title="Refresh leagues / Обновить лиги">🔄</button>
+                    </label>
                     <select id="league">
                         <option value="Standard">Standard</option>
                         <option value="Hardcore">Hardcore</option>
@@ -336,6 +340,47 @@
     </div>
 
     <script>
+        // Load available leagues from API
+        async function loadLeagues() {
+            const leagueLoading = document.getElementById('leagueLoading');
+            try {
+                leagueLoading.style.display = 'inline';
+
+                const response = await fetch('/api/leagues');
+                const data = await response.json();
+
+                if (data.success && data.leagues) {
+                    const leagueSelect = document.getElementById('league');
+                    const currentValue = leagueSelect.value;
+
+                    // Clear existing options
+                    leagueSelect.innerHTML = '';
+
+                    // Add leagues from API
+                    data.leagues.forEach(league => {
+                        const option = document.createElement('option');
+                        option.value = league;
+                        option.textContent = league;
+                        leagueSelect.appendChild(option);
+                    });
+
+                    // Try to restore previous selection or default to first league
+                    if (data.leagues.includes(currentValue)) {
+                        leagueSelect.value = currentValue;
+                    } else if (data.leagues.includes('Standard')) {
+                        leagueSelect.value = 'Standard';
+                    }
+
+                    console.log('Loaded active leagues:', data.leagues);
+                }
+            } catch (err) {
+                console.error('Error loading leagues:', err);
+                // Keep default leagues in HTML if loading fails
+            } finally {
+                leagueLoading.style.display = 'none';
+            }
+        }
+
         async function analyze() {
             const league = document.getElementById('league').value;
             const minProfit = parseFloat(document.getElementById('minProfit').value);
@@ -421,8 +466,9 @@
             }
         }
 
-        // Auto-analyze on page load
-        window.addEventListener('load', () => {
+        // Load leagues and auto-analyze on page load
+        window.addEventListener('load', async () => {
+            await loadLeagues();
             setTimeout(analyze, 500);
         });
     </script>

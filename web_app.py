@@ -6,7 +6,7 @@ PoE Divination Card Price Analyzer - Web Interface
 
 from flask import Flask, render_template, request, jsonify
 import sys
-from tarot_analyzer import DivinationCardAnalyzer
+from tarot_analyzer import DivinationCardAnalyzer, PoeNinjaAPI
 import traceback
 
 app = Flask(__name__)
@@ -78,17 +78,28 @@ def analyze():
 
 @app.route('/api/leagues', methods=['GET'])
 def get_leagues():
-    """Get list of available leagues"""
-    # Common leagues - can be updated
-    leagues = [
-        "Standard",
-        "Hardcore",
-        "Settlers",
-        "Hardcore Settlers",
-        "SSF Standard",
-        "SSF Hardcore"
-    ]
-    return jsonify({'leagues': leagues})
+    """Get list of available leagues from poe.ninja"""
+    try:
+        leagues = PoeNinjaAPI.get_active_leagues()
+        return jsonify({
+            'success': True,
+            'leagues': leagues
+        })
+    except Exception as e:
+        print(f"Error fetching leagues: {e}")
+        # Return default leagues on error
+        default_leagues = [
+            "Standard",
+            "Hardcore",
+            "Settlers",
+            "Hardcore Settlers",
+            "SSF Standard",
+            "SSF Hardcore"
+        ]
+        return jsonify({
+            'success': True,
+            'leagues': default_leagues
+        })
 
 
 if __name__ == '__main__':
