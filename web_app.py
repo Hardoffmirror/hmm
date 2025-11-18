@@ -7,6 +7,7 @@ PoE Divination Card Price Analyzer - Web Interface
 from flask import Flask, render_template, request, jsonify
 import sys
 from tarot_analyzer import DivinationCardAnalyzer, PoeNinjaAPI
+from item_categories import categorize_item, get_all_categories, get_category_groups
 import traceback
 import json
 import os
@@ -24,6 +25,35 @@ CUSTOM_LEAGUES_FILE = "custom_leagues.json"
 
 # File for storing hidden cards
 HIDDEN_CARDS_FILE = "hidden_cards.json"
+
+# File for storing item filters
+ITEM_FILTERS_FILE = "item_filters.json"
+
+
+def load_item_filters():
+    """Load item filters from file"""
+    if os.path.exists(ITEM_FILTERS_FILE):
+        try:
+            with open(ITEM_FILTERS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('filters', {})
+        except Exception as e:
+            print(f"Error loading item filters: {e}")
+            # Return all categories enabled by default
+            return {cat: True for cat in get_all_categories().keys()}
+    # Return all categories enabled by default
+    return {cat: True for cat in get_all_categories().keys()}
+
+
+def save_item_filters(filters):
+    """Save item filters to file"""
+    try:
+        with open(ITEM_FILTERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'filters': filters}, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"Error saving item filters: {e}")
+        return False
 
 
 def load_hidden_cards():
@@ -97,15 +127,27 @@ def analyze():
         # Load hidden cards to filter them out
         hidden_cards = load_hidden_cards()
 
+        # Load item filters
+        item_filters = load_item_filters()
+
         # Filter out hidden cards
         filtered_opportunities = [
             opp for opp in opportunities
             if opp[0].name not in hidden_cards  # opp[0] is the card object
         ]
 
+        # Filter by item category
+        category_filtered = []
+        for opp in filtered_opportunities:
+            reward_item = opp[1]
+            item_category = categorize_item(reward_item.name)
+            # Check if this category is enabled
+            if item_filters.get(item_category, True):
+                category_filtered.append(opp)
+
         # Format results
         results = []
-        for card, reward_item, profit, roi in filtered_opportunities[:limit]:
+        for card, reward_item, profit, roi in category_filtered[:limit]:
             results.append({
                 'card_name': card.name,
                 'stack_size': card.stack_size,
@@ -118,18 +160,19 @@ def analyze():
             })
 
         # Calculate statistics
-        total_profit = sum(opp[2] for opp in filtered_opportunities[:limit])
-        avg_roi = sum(opp[3] for opp in filtered_opportunities[:limit]) / len(filtered_opportunities[:limit]) if filtered_opportunities[:limit] else 0
+        total_profit = sum(opp[2] for opp in category_filtered[:limit])
+        avg_roi = sum(opp[3] for opp in category_filtered[:limit]) / len(category_filtered[:limit]) if category_filtered[:limit] else 0
 
         return jsonify({
             'success': True,
             'results': results,
             'stats': {
-                'total_opportunities': len(filtered_opportunities),
+                'total_opportunities': len(category_filtered),
                 'shown': len(results),
                 'total_profit': round(total_profit, 2),
                 'avg_roi': round(avg_roi, 1),
-                'hidden_count': len(opportunities) - len(filtered_opportunities)
+                'hidden_count': len(opportunities) - len(filtered_opportunities),
+                'filtered_by_category': len(filtered_opportunities) - len(category_filtered)
             }
         })
 
@@ -424,6 +467,187 @@ def clear_hidden_cards():
 
     except Exception as e:
         print(f"Error clearing hidden cards: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/item_filters', methods=['GET'])
+def get_item_filters():
+    """Get item filter settings"""
+    try:
+        filters = load_item_filters()
+        categories = get_all_categories()
+        groups = get_category_groups()
+
+        return jsonify({
+            'success': True,
+            'filters': filters,
+            'categories': categories,
+            'groups': groups
+        })
+    except Exception as e:
+        print(f"Error getting item filters: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/item_filters/update', methods=['POST'])
+def update_item_filters():
+    """Update item filter settings"""
+    try:
+        data = request.json
+        filters = data.get('filters', {})
+
+        if not isinstance(filters, dict):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid filters format'
+            }), 400
+
+        # Save filters
+        if save_item_filters(filters):
+            return jsonify({
+                'success': True,
+                'message': 'Filters updated',
+                'filters': filters
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save filters'
+            }), 500
+
+    except Exception as e:
+        print(f"Error updating item filters: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/item_filters/toggle_category', methods=['POST'])
+def toggle_category():
+    """Toggle a single category on/off"""
+    try:
+        data = request.json
+        category = data.get('category', '').strip()
+        enabled = data.get('enabled', True)
+
+        if not category:
+            return jsonify({
+                'success': False,
+                'error': 'Category cannot be empty'
+            }), 400
+
+        # Load current filters
+        filters = load_item_filters()
+
+        # Update category
+        filters[category] = enabled
+
+        # Save
+        if save_item_filters(filters):
+            return jsonify({
+                'success': True,
+                'message': f'Category {"enabled" if enabled else "disabled"}',
+                'filters': filters
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save filters'
+            }), 500
+
+    except Exception as e:
+        print(f"Error toggling category: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/item_filters/toggle_group', methods=['POST'])
+def toggle_group():
+    """Toggle all categories in a group on/off"""
+    try:
+        data = request.json
+        group_name = data.get('group_name', '').strip()
+        enabled = data.get('enabled', True)
+
+        if not group_name:
+            return jsonify({
+                'success': False,
+                'error': 'Group name cannot be empty'
+            }), 400
+
+        # Load current filters
+        filters = load_item_filters()
+
+        # Get categories in group
+        groups = get_category_groups()
+        categories_in_group = groups.get(group_name, [])
+
+        if not categories_in_group:
+            return jsonify({
+                'success': False,
+                'error': 'Group not found'
+            }), 404
+
+        # Update all categories in group
+        for category in categories_in_group:
+            filters[category] = enabled
+
+        # Save
+        if save_item_filters(filters):
+            return jsonify({
+                'success': True,
+                'message': f'Group {"enabled" if enabled else "disabled"}',
+                'filters': filters
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save filters'
+            }), 500
+
+    except Exception as e:
+        print(f"Error toggling group: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/item_filters/reset', methods=['POST'])
+def reset_filters():
+    """Reset all filters to default (all enabled)"""
+    try:
+        # Get all categories and enable them
+        categories = get_all_categories()
+        default_filters = {cat: True for cat in categories.keys()}
+
+        if save_item_filters(default_filters):
+            return jsonify({
+                'success': True,
+                'message': 'Filters reset to default',
+                'filters': default_filters
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to reset filters'
+            }), 500
+
+    except Exception as e:
+        print(f"Error resetting filters: {e}")
         traceback.print_exc()
         return jsonify({
             'success': False,

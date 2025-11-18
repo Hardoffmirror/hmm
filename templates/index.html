@@ -524,6 +524,74 @@
             font-size: 0.9em;
             margin-left: 5px;
         }
+
+        /* Item filters styles */
+        .filter-group {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .filter-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .filter-group-title {
+            color: #ffd700;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .filter-group-toggle {
+            padding: 5px 12px;
+            font-size: 0.85em;
+            margin: 0;
+        }
+
+        .filter-categories {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .filter-category {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .filter-category:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .filter-category input[type="checkbox"] {
+            margin-right: 10px;
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .filter-category label {
+            cursor: pointer;
+            margin: 0;
+            flex: 1;
+            font-size: 0.9em;
+        }
+
+        .filter-category.disabled {
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -580,7 +648,12 @@
                 </div>
             </div>
 
-            <button id="analyzeBtn" onclick="analyze()">🔍 Analyze / Анализировать</button>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="analyzeBtn" onclick="analyze()" style="flex: 1;">🔍 Analyze / Анализировать</button>
+                <button onclick="openItemFilters(); return false;" style="padding: 15px 30px; background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);" title="Filter by item type / Фильтр по типу предмета">
+                    🎯 Item Filters
+                </button>
+            </div>
         </div>
 
         <div class="loading" id="loading">
@@ -690,6 +763,33 @@
                 </div>
 
                 <div class="leagues-list" id="hiddenCardsList">
+                    <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Filters Modal -->
+    <div id="itemFiltersModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>🎯 Item Filters / Фильтры предметов</h2>
+                <span class="close" onclick="closeItemFilters()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-info">
+                    <strong>Info / Инфо:</strong><br>
+                    Filter results by item category. Unchecked categories will be hidden from analysis.<br>
+                    Фильтр результатов по категориям предметов. Снятые галочки скроют категории из анализа.
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <button onclick="resetAllFilters()" style="padding: 8px 15px; margin: 0; font-size: 0.9em; background: rgba(255, 200, 50, 0.6);">
+                        🔄 Reset All / Сбросить все
+                    </button>
+                </div>
+
+                <div id="filterGroupsContainer">
                     <p style="color: #888; text-align: center;">Loading... / Загрузка...</p>
                 </div>
             </div>
@@ -1248,6 +1348,170 @@
             } catch (err) {
                 console.error('Error clearing hidden cards:', err);
                 alert('Error clearing hidden cards / Ошибка очистки');
+            }
+        }
+
+        // Item Filters Manager Functions
+        let currentFilters = {};
+        let currentFilterData = {};
+
+        function openItemFilters() {
+            document.getElementById('itemFiltersModal').style.display = 'block';
+            loadItemFilters();
+        }
+
+        function closeItemFilters() {
+            document.getElementById('itemFiltersModal').style.display = 'none';
+        }
+
+        // Update modal click handler to include filters modal
+        window.onclick = function(event) {
+            const leagueModal = document.getElementById('leagueModal');
+            const hiddenCardsModal = document.getElementById('hiddenCardsModal');
+            const itemFiltersModal = document.getElementById('itemFiltersModal');
+            if (event.target === leagueModal) {
+                closeLeagueManager();
+            } else if (event.target === hiddenCardsModal) {
+                closeHiddenCardsManager();
+            } else if (event.target === itemFiltersModal) {
+                closeItemFilters();
+            }
+        }
+
+        async function loadItemFilters() {
+            const container = document.getElementById('filterGroupsContainer');
+            try {
+                const response = await fetch('/api/item_filters');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentFilters = data.filters;
+                    currentFilterData = data;
+
+                    // Render filter groups
+                    container.innerHTML = '';
+                    const groups = data.groups;
+                    const categories = data.categories;
+
+                    for (const [groupName, categoryKeys] of Object.entries(groups)) {
+                        const groupDiv = document.createElement('div');
+                        groupDiv.className = 'filter-group';
+
+                        // Group header with toggle all button
+                        const allEnabled = categoryKeys.every(key => currentFilters[key]);
+                        const headerHTML = `
+                            <div class="filter-group-header">
+                                <div class="filter-group-title">${groupName}</div>
+                                <button class="filter-group-toggle" onclick="toggleGroup('${groupName}', ${!allEnabled})">
+                                    ${allEnabled ? '✓ All Enabled' : '☐ Enable All'} / ${allEnabled ? '✓ Все включено' : '☐ Включить все'}
+                                </button>
+                            </div>
+                        `;
+
+                        // Categories grid
+                        let categoriesHTML = '<div class="filter-categories">';
+                        for (const catKey of categoryKeys) {
+                            const catName = categories[catKey] || catKey;
+                            const isEnabled = currentFilters[catKey];
+                            categoriesHTML += `
+                                <div class="filter-category ${isEnabled ? '' : 'disabled'}" onclick="toggleCategory('${catKey}')">
+                                    <input type="checkbox" id="filter_${catKey}" ${isEnabled ? 'checked' : ''} onclick="event.stopPropagation(); toggleCategory('${catKey}')">
+                                    <label for="filter_${catKey}">${catName}</label>
+                                </div>
+                            `;
+                        }
+                        categoriesHTML += '</div>';
+
+                        groupDiv.innerHTML = headerHTML + categoriesHTML;
+                        container.appendChild(groupDiv);
+                    }
+                } else {
+                    container.innerHTML = '<p style="color: #f44;">Error loading filters / Ошибка загрузки</p>';
+                }
+            } catch (err) {
+                console.error('Error loading item filters:', err);
+                container.innerHTML = '<p style="color: #f44;">Error loading filters / Ошибка загрузки</p>';
+            }
+        }
+
+        async function toggleCategory(category) {
+            try {
+                const newState = !currentFilters[category];
+
+                const response = await fetch('/api/item_filters/toggle_category', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ category: category, enabled: newState })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentFilters = data.filters;
+                    loadItemFilters();  // Reload to update UI
+                    analyze();  // Refresh analysis
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error toggling category:', err);
+                alert('Error toggling category / Ошибка переключения категории');
+            }
+        }
+
+        async function toggleGroup(groupName, enable) {
+            try {
+                const response = await fetch('/api/item_filters/toggle_group', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ group_name: groupName, enabled: enable })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentFilters = data.filters;
+                    loadItemFilters();  // Reload to update UI
+                    analyze();  // Refresh analysis
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error toggling group:', err);
+                alert('Error toggling group / Ошибка переключения группы');
+            }
+        }
+
+        async function resetAllFilters() {
+            if (!confirm('Reset all filters to default (all enabled)? / Сбросить все фильтры (все включено)?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/item_filters/reset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentFilters = data.filters;
+                    loadItemFilters();  // Reload to update UI
+                    analyze();  // Refresh analysis
+                    alert('Filters reset! / Фильтры сброшены!');
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Error resetting filters:', err);
+                alert('Error resetting filters / Ошибка сброса фильтров');
             }
         }
 
