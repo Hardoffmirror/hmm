@@ -91,8 +91,8 @@ def get_leagues():
         default_leagues = [
             "Standard",
             "Hardcore",
-            "Settlers of Kalguur",
-            "Hardcore Settlers of Kalguur",
+            "Keepers of the Flame",
+            "Hardcore Keepers of the Flame",
             "SSF Standard",
             "SSF Hardcore"
         ]

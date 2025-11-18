@@ -199,19 +199,19 @@ class PoeNinjaAPI:
             print("-" * 50)
 
             # List of known possible leagues (UPDATE THIS when new league starts!)
-            # Current as of December 2024
+            # Current as of November 2025
             possible_leagues = [
                 # Current challenge league (update these when new league starts!)
-                "Settlers of Kalguur",
-                "Hardcore Settlers of Kalguur",
+                "Keepers of the Flame",
+                "Hardcore Keepers of the Flame",
 
                 # Permanent leagues
                 "Standard",
                 "Hardcore",
 
                 # SSF variants
-                "SSF Settlers of Kalguur",
-                "SSF Hardcore Settlers of Kalguur",
+                "SSF Keepers of the Flame",
+                "SSF Hardcore Keepers of the Flame",
                 "SSF Standard",
                 "SSF Hardcore",
             ]
@@ -247,7 +247,7 @@ class PoeNinjaAPI:
             # If no leagues found, return permanent leagues as fallback
             if not active_leagues:
                 print("WARNING: No leagues detected! Using fallback list.")
-                active_leagues = ["Standard", "Hardcore", "Settlers of Kalguur"]
+                active_leagues = ["Standard", "Hardcore", "Keepers of the Flame"]
 
             # Update cache
             PoeNinjaAPI.LEAGUES_CACHE = active_leagues
@@ -261,7 +261,7 @@ class PoeNinjaAPI:
             traceback.print_exc()
 
             # Return fallback leagues
-            return ["Standard", "Hardcore", "Settlers of Kalguur", "SSF Standard"]
+            return ["Standard", "Hardcore", "Keepers of the Flame", "SSF Standard"]
 
 
 class DivinationCardAnalyzer:
