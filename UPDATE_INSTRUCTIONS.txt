@@ -1,0 +1,72 @@
+ИНСТРУКЦИЯ ПО ОБНОВЛЕНИЮ / UPDATE INSTRUCTIONS
+================================================
+
+ВАМ НУЖНО ОБНОВИТЬ КОД НА ВАШЕМ КОМПЬЮТЕРЕ!
+YOU NEED TO UPDATE THE CODE ON YOUR COMPUTER!
+
+Шаги / Steps:
+
+1. ОСТАНОВИТЕ веб-сервер (если запущен)
+   STOP the web server (if running)
+   - Нажмите Ctrl+C в окне где запущен run_web.bat
+   - Press Ctrl+C in the window where run_web.bat is running
+
+2. ОБНОВИТЕ код
+   UPDATE the code
+   - Запустите update.bat
+   - Run update.bat
+
+3. ПЕРЕЗАПУСТИТЕ веб-сервер
+   RESTART the web server
+   - Запустите run_web.bat
+   - Run run_web.bat
+
+4. ОБНОВИТЕ страницу в браузере
+   REFRESH the page in browser
+   - Нажмите Ctrl+F5 (полное обновление)
+   - Press Ctrl+F5 (hard refresh)
+
+НОВЫЕ ФУНКЦИИ / NEW FEATURES:
+==============================
+
+После обновления вы увидите:
+After updating you will see:
+
+✓ Кнопка "⭐ Избранное" в шапке
+  "⭐ Favorites" button in header
+
+✓ Кнопка "🎯 Фильтры предметов" в шапке
+  "🎯 Item Filters" button in header
+
+✓ Кнопка "⚙️" для управления лигами
+  "⚙️" button for league management
+
+✓ Кнопка "👁️‍🗨️" для скрытых карт
+  "👁️‍🗨️" button for hidden cards
+
+✓ Колонка "Actions" в таблице с кнопками:
+  "Actions" column in table with buttons:
+  - "Hide" - скрыть карту / hide card
+  - "⭐ Fav" - добавить в избранное / add to favorites
+
+✓ В избранном можно:
+  In favorites you can:
+  - Задавать свои цены (нажмите на цифру)
+  - Set custom prices (click on number)
+  - Менять ссылки (нажмите на ссылку)
+  - Edit links (click on link)
+  - Видеть API цены и свои цены рядом
+  - See API prices and custom prices side-by-side
+
+✓ В фильтрах 32 категории предметов:
+  In filters 32 item categories:
+  - Валюта (6 подкатегорий)
+  - Currency (6 subcategories)
+  - Аксессуары (кольца, амулеты, пояса)
+  - Accessories (rings, amulets, belts)
+  - Оружие (8 типов)
+  - Weapons (8 types)
+  - Доспехи (6 типов)
+  - Armour (6 types)
+  - Прочее (карты, камни, самоцветы и т.д.)
+  - Other (maps, gems, jewels, etc.)
