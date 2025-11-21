@@ -730,6 +730,11 @@
         </div>
 
         <div id="resultsContainer" style="display: none;">
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="searchInput" placeholder="Search cards or rewards... / Поиск карт или наград..."
+                       oninput="filterTable()" style="flex: 1; padding: 10px;">
+                <span id="filteredCount" style="color: #888; font-size: 0.9em;"></span>
+            </div>
             <div class="results">
                 <table id="resultsTableElement">
                     <thead>
@@ -870,9 +875,71 @@
     <script>
         // Global data storage for sorting
         let currentData = [];
+        let filteredData = [];  // Data after search filter
         let currentLeague = 'Standard';
         let currentCurrency = 'chaos';  // 'chaos' or 'divine'
         let divineRate = 1.0;  // Divine to Chaos rate
+
+        // LocalStorage keys
+        const STORAGE_KEYS = {
+            league: 'poe_analyzer_league',
+            minProfit: 'poe_analyzer_min_profit',
+            minRoi: 'poe_analyzer_min_roi',
+            limit: 'poe_analyzer_limit',
+            currency: 'poe_analyzer_currency'
+        };
+
+        // Load settings from localStorage
+        function loadSettings() {
+            const savedLeague = localStorage.getItem(STORAGE_KEYS.league);
+            const savedMinProfit = localStorage.getItem(STORAGE_KEYS.minProfit);
+            const savedMinRoi = localStorage.getItem(STORAGE_KEYS.minRoi);
+            const savedLimit = localStorage.getItem(STORAGE_KEYS.limit);
+            const savedCurrency = localStorage.getItem(STORAGE_KEYS.currency);
+
+            if (savedMinProfit) document.getElementById('minProfit').value = savedMinProfit;
+            if (savedMinRoi) document.getElementById('minRoi').value = savedMinRoi;
+            if (savedLimit) document.getElementById('limit').value = savedLimit;
+            if (savedCurrency) {
+                currentCurrency = savedCurrency;
+                switchCurrency(savedCurrency);
+            }
+
+            return savedLeague;  // Return league to set after loading leagues list
+        }
+
+        // Save settings to localStorage
+        function saveSettings() {
+            localStorage.setItem(STORAGE_KEYS.league, document.getElementById('league').value);
+            localStorage.setItem(STORAGE_KEYS.minProfit, document.getElementById('minProfit').value);
+            localStorage.setItem(STORAGE_KEYS.minRoi, document.getElementById('minRoi').value);
+            localStorage.setItem(STORAGE_KEYS.limit, document.getElementById('limit').value);
+            localStorage.setItem(STORAGE_KEYS.currency, currentCurrency);
+        }
+
+        // Filter table by search input
+        function filterTable() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+
+            if (!searchTerm) {
+                filteredData = [...currentData];
+            } else {
+                filteredData = currentData.filter(row =>
+                    row.card_name.toLowerCase().includes(searchTerm) ||
+                    row.reward_name.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            renderTable(filteredData, currentLeague);
+
+            // Update filtered count
+            const countSpan = document.getElementById('filteredCount');
+            if (searchTerm && filteredData.length !== currentData.length) {
+                countSpan.textContent = `Showing ${filteredData.length} of ${currentData.length}`;
+            } else {
+                countSpan.textContent = '';
+            }
+        }
 
         // Copy to clipboard function
         function copyToClipboard(text, element) {
@@ -968,8 +1035,8 @@
             // Add sort class to clicked header
             clickedHeader.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
 
-            // Sort data
-            currentData.sort((a, b) => {
+            // Sort filtered data
+            filteredData.sort((a, b) => {
                 let aVal = a[column];
                 let bVal = b[column];
 
@@ -989,7 +1056,7 @@
             });
 
             // Re-render table
-            renderTable(currentData, currentLeague);
+            renderTable(filteredData, currentLeague);
         }
 
         // Render table rows
@@ -1099,6 +1166,9 @@
             // Store current league for trade links
             currentLeague = league;
 
+            // Save settings to localStorage
+            saveSettings();
+
             // Load Divine rate for this league
             await loadDivineRate(league);
 
@@ -1150,11 +1220,21 @@
                 if (data.results.length === 0) {
                     noResults.style.display = 'block';
                 } else {
-                    // Store data for sorting
-                    currentData = data.results;
+                    // Store data for sorting - sort by profit descending by default
+                    currentData = data.results.sort((a, b) => b.profit - a.profit);
+                    filteredData = [...currentData];
+
+                    // Clear search input
+                    document.getElementById('searchInput').value = '';
+                    document.getElementById('filteredCount').textContent = '';
 
                     // Render table with new functionality
-                    renderTable(currentData, currentLeague);
+                    renderTable(filteredData, currentLeague);
+
+                    // Mark profit column as sorted
+                    const profitHeader = document.querySelector('th[data-column="profit"]');
+                    document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+                    if (profitHeader) profitHeader.classList.add('sort-desc');
 
                     statsContainer.style.display = 'block';
                     resultsContainer.style.display = 'block';
@@ -1790,36 +1870,6 @@
             }
         }
 
-        async function addToFavorites(row) {
-            try {
-                const response = await fetch('/api/favorites/add', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        card_name: row.card_name,
-                        stack_size: row.stack_size,
-                        reward_name: row.reward_name,
-                        api_card_price: row.card_price,
-                        api_reward_price: row.reward_price
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    updateFavoritesCountBadge(data.favorites.length);
-                    alert(`Card "${row.card_name}" added to favorites! / Карта "${row.card_name}" добавлена в избранное!`);
-                } else {
-                    alert(`Error: ${data.error}`);
-                }
-            } catch (err) {
-                console.error('Error adding to favorites:', err);
-                alert('Error adding to favorites / Ошибка добавления в избранное');
-            }
-        }
-
         async function removeFromFavorites(cardName) {
             if (!confirm(`Remove "${cardName}" from favorites? / Удалить "${cardName}" из избранного?`)) {
                 return;
@@ -1951,12 +2001,36 @@
             // Initialize table sorting
             initTableSorting();
 
+            // Load settings from localStorage
+            const savedLeague = loadSettings();
+
             // Load hidden cards count
             loadHiddenCardsList();
 
-            // Load leagues and analyze
+            // Load favorites count
+            try {
+                const response = await fetch('/api/favorites');
+                const data = await response.json();
+                if (data.success) {
+                    updateFavoritesCountBadge(data.favorites.length);
+                }
+            } catch (err) {
+                console.error('Error loading favorites count:', err);
+            }
+
+            // Load leagues and set saved league
             await loadLeagues();
-            setTimeout(analyze, 500);
+
+            // Set saved league if exists
+            if (savedLeague) {
+                const leagueSelect = document.getElementById('league');
+                if ([...leagueSelect.options].some(opt => opt.value === savedLeague)) {
+                    leagueSelect.value = savedLeague;
+                }
+            }
+
+            // Start analysis
+            setTimeout(analyze, 300);
         });
     </script>
 </body>

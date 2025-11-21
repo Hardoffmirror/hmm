@@ -11,8 +11,66 @@ from item_categories import categorize_item, get_all_categories, get_category_gr
 import traceback
 import json
 import os
+import time
 
 app = Flask(__name__)
+
+# Cache for API data (league -> (timestamp, data))
+_cache = {}
+CACHE_DURATION = 300  # 5 minutes in seconds
+
+
+def get_cached_analysis(league):
+    """Get cached analysis data or fetch new data"""
+    global _cache
+
+    cache_key = f"analysis_{league}"
+    current_time = time.time()
+
+    # Check if we have valid cached data
+    if cache_key in _cache:
+        timestamp, data = _cache[cache_key]
+        if current_time - timestamp < CACHE_DURATION:
+            return data
+
+    # Fetch new data
+    analyzer = DivinationCardAnalyzer(league=league)
+    opportunities = analyzer.analyze(min_profit=-1000, min_roi=-1000)  # Get all opportunities
+
+    # Cache the result
+    _cache[cache_key] = (current_time, opportunities)
+
+    return opportunities
+
+
+def get_cached_divine_rate(league):
+    """Get cached Divine Orb rate"""
+    global _cache
+
+    cache_key = f"divine_{league}"
+    current_time = time.time()
+
+    # Check if we have valid cached data
+    if cache_key in _cache:
+        timestamp, rate = _cache[cache_key]
+        if current_time - timestamp < CACHE_DURATION:
+            return rate
+
+    # Fetch new data
+    api = PoeNinjaAPI(league)
+    currency_data = api.fetch_currency_prices()
+
+    divine_rate = 1.0
+    for item in currency_data:
+        if item.get('currencyTypeName') == 'Divine Orb':
+            divine_rate = item.get('chaosEquivalent', 1.0)
+            break
+
+    # Cache the result
+    _cache[cache_key] = (current_time, divine_rate)
+
+    return divine_rate
+
 
 # Default settings
 DEFAULT_LEAGUE = "Keepers"
@@ -147,9 +205,14 @@ def analyze():
         min_roi = float(data.get('min_roi', DEFAULT_MIN_ROI))
         limit = int(data.get('limit', DEFAULT_LIMIT))
 
-        # Create analyzer and run analysis
-        analyzer = DivinationCardAnalyzer(league=league)
-        opportunities = analyzer.analyze(min_profit=min_profit, min_roi=min_roi)
+        # Get cached analysis data
+        all_opportunities = get_cached_analysis(league)
+
+        # Filter by profit and ROI
+        opportunities = [
+            opp for opp in all_opportunities
+            if opp[2] >= min_profit and opp[3] >= min_roi
+        ]
 
         # Load hidden cards to filter them out
         hidden_cards = load_hidden_cards()
@@ -897,19 +960,13 @@ def clear_favorites():
 
 
 @app.route('/api/divine_rate', methods=['GET'])
-def get_divine_rate():
+def get_divine_rate_endpoint():
     """Get Divine Orb to Chaos Orb exchange rate"""
     try:
         league = request.args.get('league', DEFAULT_LEAGUE)
 
-        api = PoeNinjaAPI(league)
-        currency_data = api.fetch_currency_prices()
-
-        divine_rate = 1.0
-        for item in currency_data:
-            if item.get('currencyTypeName') == 'Divine Orb':
-                divine_rate = item.get('chaosEquivalent', 1.0)
-                break
+        # Use cached rate
+        divine_rate = get_cached_divine_rate(league)
 
         return jsonify({
             'success': True,
